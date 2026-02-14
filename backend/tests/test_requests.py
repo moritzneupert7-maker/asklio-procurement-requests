@@ -63,7 +63,7 @@ def test_create_from_offer():
     )
 
     with patch("app.routers.requests.extract_offer_text", return_value=mock_extraction), \
-         patch("app.routers.requests.predict_commodity_group_id", side_effect=Exception("skip")):
+         patch("app.routers.requests.predict_commodity_group_id", return_value="999"):
         offer_content = b"Offer from ACME Corp\nPrinter paper A4, 100 packs @ 9.99 each"
         r = client.post(
             "/requests/create-from-offer",
@@ -105,7 +105,7 @@ def test_create_from_offer_uses_extracted_department():
     )
 
     with patch("app.routers.requests.extract_offer_text", return_value=mock_extraction), \
-         patch("app.routers.requests.predict_commodity_group_id", side_effect=Exception("skip")):
+         patch("app.routers.requests.predict_commodity_group_id", return_value="999"):
         r = client.post(
             "/requests/create-from-offer",
             files={"file": ("offer.txt", b"test content", "text/plain")},
