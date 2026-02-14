@@ -10,13 +10,13 @@ export default function App() {
   const [message, setMessage] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
-  const [form, setForm] = useState<ProcurementRequestCreate>({
-    requestor_name: "John Doe",
-    title: "Adobe Creative Cloud Subscription",
-    department: "Creative Marketing Department",
-    vendor_name: "Global Tech Solutions",
-    vendor_vat_id: "DE987654321",
-    order_lines: [{ description: "Adobe Photoshop License", unit_price: 150, amount: 10, unit: "licenses" }],
+  const [form] = useState<ProcurementRequestCreate>({
+    requestor_name: "Moritz Neupert",
+    title: "New Procurement Request",
+    department: "Marketing",
+    vendor_name: "Pending – upload offer",
+    vendor_vat_id: "",
+    order_lines: [{ description: "Pending – upload offer", unit_price: 1, amount: 1, unit: "pcs" }],
   });
 
   async function refresh() {
@@ -81,8 +81,11 @@ export default function App() {
       <button onClick={onCreate}>Create request</button>
 
       {createdId && (
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 12, padding: 16, background: "#f0f4ff", borderRadius: 8, border: "1px solid #b3c6ff" }}>
           <div>Created request id: {createdId}</div>
+          <p style={{ marginTop: 8, fontWeight: 500 }}>
+            Please upload an offer document to automatically fill in vendor details, order lines, and pricing.
+          </p>
 
           <input
             style={{ marginTop: 8 }}
