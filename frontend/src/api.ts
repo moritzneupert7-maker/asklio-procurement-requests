@@ -54,3 +54,9 @@ export async function createFromOffer(file: File) {
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
+export async function listCommodityGroups() {
+  const res = await fetch(`${API_BASE}/commodity-groups`);
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
