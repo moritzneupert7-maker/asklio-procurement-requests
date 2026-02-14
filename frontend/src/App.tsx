@@ -10,14 +10,14 @@ export default function App() {
   const [message, setMessage] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
 
-  const [form] = useState<ProcurementRequestCreate>({
+  const form: ProcurementRequestCreate = {
     requestor_name: "Moritz Neupert",
     title: "New Procurement Request",
     department: "Marketing",
     vendor_name: "Pending – upload offer",
     vendor_vat_id: "",
     order_lines: [{ description: "Pending – upload offer", unit_price: 1, amount: 1, unit: "pcs" }],
-  });
+  };
 
   async function refresh() {
     const data = await listRequests();
