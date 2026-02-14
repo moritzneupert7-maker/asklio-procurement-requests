@@ -43,6 +43,7 @@ class OrderLine(Base):
     id = Column(Integer, primary_key=True, index=True)
     request_id = Column(Integer, ForeignKey("procurement_requests.id"), nullable=False, index=True)
 
+    product = Column(String(250), nullable=True)
     description = Column(String(500), nullable=False)
     unit_price = Column(Numeric(12, 2), nullable=False)
     amount = Column(Integer, nullable=False)

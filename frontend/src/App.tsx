@@ -16,7 +16,13 @@ export default function App() {
     department: "Creative Marketing Department",
     vendor_name: "Global Tech Solutions",
     vendor_vat_id: "DE987654321",
-    order_lines: [{ description: "Adobe Photoshop License", unit_price: 150, amount: 10, unit: "licenses" }],
+    order_lines: [{ 
+      product: "Adobe Photoshop License",
+      description: "Adobe Photoshop CC 2024 - 1 Year Subscription License",
+      unit_price: 150,
+      amount: 10,
+      unit: "licenses"
+    }],
   });
 
   async function refresh() {
@@ -87,7 +93,7 @@ export default function App() {
           <input
             style={{ marginTop: 8 }}
             type="file"
-            accept=".txt"
+            accept=".txt,.pdf"
             onChange={(e) => setOfferFile(e.target.files?.[0] ?? null)}
           />
 

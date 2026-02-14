@@ -42,6 +42,7 @@ def create_request(payload: schemas.ProcurementRequestCreate, db: Session = Depe
         total_cost += line_total
         req.order_lines.append(
             models.OrderLine(
+                product=line.product,
                 description=line.description,
                 unit_price=line.unit_price,
                 amount=line.amount,
@@ -162,6 +163,7 @@ def extract_offer(request_id: int, db: Session = Depends(get_db)):
     for line in extracted.order_lines:
         req.order_lines.append(
             models.OrderLine(
+                product=line.product,
                 description=line.description,
                 unit_price=line.unit_price,
                 amount=line.amount,
