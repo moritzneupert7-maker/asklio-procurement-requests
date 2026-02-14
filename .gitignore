@@ -1,3 +1,6 @@
+# Local database
+backend/local.db
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -205,3 +208,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Application artifacts
+backend/local.db
+backend/uploads/
+frontend/node_modules/
+frontend/dist/

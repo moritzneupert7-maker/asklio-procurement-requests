@@ -42,6 +42,7 @@ def create_request(payload: schemas.ProcurementRequestCreate, db: Session = Depe
         total_cost += line_total
         req.order_lines.append(
             models.OrderLine(
+                product=line.product,
                 description=line.description,
                 unit_price=line.unit_price,
                 amount=line.amount,
@@ -63,6 +64,113 @@ def create_request(payload: schemas.ProcurementRequestCreate, db: Session = Depe
     return req
 
 
+
+
+@router.post("/create-from-offer", response_model=schemas.ProcurementRequestOut)
+async def create_from_offer(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Upload an offer file, extract data via LLM, and create a procurement request automatically."""
+
+    contents = await file.read()
+
+    # Read offer text from file (.txt or text-based .pdf)
+    filename = file.filename or "unknown"
+    suffix = Path(filename).suffix.lower()
+
+    if suffix == ".txt":
+        offer_text = contents.decode("utf-8", errors="ignore")
+    elif suffix == ".pdf":
+        import io
+        text_parts = []
+        with pdfplumber.open(io.BytesIO(contents)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    text_parts.append(page_text)
+        offer_text = "\n\n".join(text_parts).strip()
+        if not offer_text:
+            raise HTTPException(
+                status_code=400,
+                detail="PDF has no extractable text (maybe scanned). Upload a text-based PDF or add OCR.",
+            )
+    else:
+        raise HTTPException(status_code=400, detail="Supported offer types: .txt, .pdf")
+
+    # LLM extraction
+    try:
+        extracted = extract_offer_text(offer_text)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
+
+    # Create procurement request with defaults + extracted data
+    requestor_name = "Moritz Neupert"
+    department = extracted.department or "Marketing"
+
+    req = models.ProcurementRequest(
+        requestor_name=requestor_name,
+        title=extracted.title,
+        department=department,
+        vendor_name=extracted.vendor_name,
+        vendor_vat_id=extracted.vendor_vat_id,
+        commodity_group_id=None,
+        current_status="Open",
+        total_cost=Decimal("0.00"),
+    )
+
+    total_cost = Decimal("0.00")
+    for line in extracted.order_lines:
+        req.order_lines.append(
+            models.OrderLine(
+                description=line.description,
+                unit_price=line.unit_price,
+                amount=line.amount,
+                unit=line.unit,
+                total_price=line.total_price,
+            )
+        )
+        total_cost += line.total_price
+    req.total_cost = total_cost.quantize(Decimal("0.01"))
+
+    req.status_events.append(
+        models.StatusEvent(from_status=None, to_status="Open", changed_by=requestor_name)
+    )
+
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    # Save attachment
+    safe_name = f"{req.id}_{filename}".replace("/", "_").replace("\\", "_")
+    save_path = UPLOAD_DIR / safe_name
+    save_path.write_bytes(contents)
+
+    att = models.Attachment(
+        request_id=req.id,
+        filename=filename,
+        path=str(save_path),
+    )
+    db.add(att)
+
+    # Predict commodity group (auto-fill)
+    groups = db.query(models.CommodityGroup).order_by(models.CommodityGroup.id).all()
+    groups_text = "\n".join([f"{g.id} | {g.category} | {g.name}" for g in groups])
+    lines_text = "; ".join([ol.description for ol in req.order_lines])
+
+    try:
+        predicted = predict_commodity_group_id(
+            title=req.title,
+            department=req.department,
+            vendor_name=req.vendor_name,
+            order_lines_text=lines_text,
+            commodity_groups_text=groups_text,
+        )
+        if db.get(models.CommodityGroup, predicted):
+            req.commodity_group_id = predicted
+    except Exception:
+        pass  # keep request usable even if prediction fails
+
+    db.commit()
+    db.refresh(req)
+    return req
 
 
 @router.post("/{request_id}/upload-offer")
@@ -153,6 +261,8 @@ def extract_offer(request_id: int, db: Session = Depends(get_db)):
     # Apply extracted fields
     req.vendor_name = extracted.vendor_name
     req.vendor_vat_id = extracted.vendor_vat_id
+    if extracted.title:
+        req.title = extracted.title
     if extracted.department:
         req.department = extracted.department
 
@@ -162,6 +272,7 @@ def extract_offer(request_id: int, db: Session = Depends(get_db)):
     for line in extracted.order_lines:
         req.order_lines.append(
             models.OrderLine(
+                product=line.product,
                 description=line.description,
                 unit_price=line.unit_price,
                 amount=line.amount,

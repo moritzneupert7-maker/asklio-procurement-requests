@@ -6,7 +6,7 @@ export type ProcurementRequestCreate = {
   department: string;
   vendor_name: string;
   vendor_vat_id?: string;
-  order_lines: { description: string; unit_price: number; amount: number; unit?: string }[];
+  order_lines: { product?: string; description: string; unit_price: number; amount: number; unit?: string }[];
 };
 
 export async function createRequest(payload: ProcurementRequestCreate) {
@@ -39,6 +39,18 @@ export async function uploadOffer(requestId: number, file: File) {
 
 export async function extractOffer(requestId: number) {
   const res = await fetch(`${API_BASE}/requests/${requestId}/extract-offer`, { method: "POST" });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function createFromOffer(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE}/requests/create-from-offer`, {
+    method: "POST",
+    body: formData,
+  });
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }

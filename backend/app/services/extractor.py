@@ -1,5 +1,6 @@
 from decimal import Decimal
 from typing import Optional, List
+import os
 
 from openai import OpenAI
 from pydantic import BaseModel
@@ -9,7 +10,8 @@ load_dotenv()
 
 
 class ExtractedOrderLine(BaseModel):
-    description: str
+    product: str  # Product name
+    description: str  # Full description/details
     unit_price: Decimal
     amount: int
     unit: Optional[str]
@@ -17,6 +19,7 @@ class ExtractedOrderLine(BaseModel):
 
 
 class OfferExtraction(BaseModel):
+    title: str
     vendor_name: str
     vendor_vat_id: Optional[str]
     department: Optional[str]
@@ -24,10 +27,19 @@ class OfferExtraction(BaseModel):
     total_cost: Decimal
 
 
-client = OpenAI()
+# Only initialize OpenAI client if API key is available
+client = None
+if os.getenv("OPENAI_API_KEY"):
+    client = OpenAI()
 
 
 def extract_offer_text(text: str) -> OfferExtraction:
+    if not client:
+        raise RuntimeError(
+            "OpenAI API key is not configured. "
+            "Please set OPENAI_API_KEY in your .env file or environment variables."
+        )
+    
     completion = client.chat.completions.parse(
         model="gpt-4o-mini",
         messages=[
@@ -36,7 +48,10 @@ def extract_offer_text(text: str) -> OfferExtraction:
                 "content": (
                     "Extract procurement offer data from the user's text. "
                     "Return numbers as plain decimals (no currency symbols). "
-                    "If a field is missing, use null. Ensure totals are consistent."
+                    "If a field is missing, use null. Ensure totals are consistent. "
+                    "For the 'title' field, generate a concise, descriptive procurement request title "
+                    "that summarises the purpose of the offer (e.g. 'Office Furniture Purchase' or "
+                    "'Annual IT Support Contract')."
                 ),
             },
             {"role": "user", "content": text},
