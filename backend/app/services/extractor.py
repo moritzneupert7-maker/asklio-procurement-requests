@@ -17,6 +17,7 @@ class ExtractedOrderLine(BaseModel):
 
 
 class OfferExtraction(BaseModel):
+    title: str
     vendor_name: str
     vendor_vat_id: Optional[str]
     department: Optional[str]
@@ -36,7 +37,10 @@ def extract_offer_text(text: str) -> OfferExtraction:
                 "content": (
                     "Extract procurement offer data from the user's text. "
                     "Return numbers as plain decimals (no currency symbols). "
-                    "If a field is missing, use null. Ensure totals are consistent."
+                    "If a field is missing, use null. Ensure totals are consistent. "
+                    "For the 'title' field, generate a concise, descriptive procurement request title "
+                    "that summarises the purpose of the offer (e.g. 'Office Furniture Purchase' or "
+                    "'Annual IT Support Contract')."
                 ),
             },
             {"role": "user", "content": text},
