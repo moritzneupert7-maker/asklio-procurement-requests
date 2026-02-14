@@ -90,7 +90,7 @@ export default function App() {
           <input
             style={{ marginTop: 8 }}
             type="file"
-            accept=".txt"
+            accept=".txt,.pdf"
             onChange={(e) => setOfferFile(e.target.files?.[0] ?? null)}
           />
 
