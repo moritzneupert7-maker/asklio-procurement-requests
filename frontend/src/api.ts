@@ -42,3 +42,15 @@ export async function extractOffer(requestId: number) {
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
+export async function createFromOffer(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE}/requests/create-from-offer`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}

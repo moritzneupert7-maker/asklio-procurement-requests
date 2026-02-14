@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import "./App.css";
-import { createRequest, extractOffer, listRequests, uploadOffer, type ProcurementRequestCreate } from "./api";
+import { createFromOffer, listRequests } from "./api";
 
 export default function App() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [requests, setRequests] = useState<any[]>([]);
-  const [createdId, setCreatedId] = useState<number | null>(null);
   const [offerFile, setOfferFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -28,42 +28,23 @@ export default function App() {
     refresh().catch((e) => setError(String(e)));
   }, []);
 
-  async function onCreate() {
+  async function onCreateFromOffer() {
+    if (!offerFile) return;
     setError(null);
+    setMessage(null);
+    setLoading(true);
     try {
-      const created = await createRequest(form);
-      setCreatedId(created.id);
+      await createFromOffer(offerFile);
+      setMessage("Request created from offer successfully.");
+      setOfferFile(null);
       await refresh();
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
     }
   }
 
-  async function onUpload() {
-    if (!createdId || !offerFile) return;
-    setError(null);
-    setMessage(null);
-    try {
-      await uploadOffer(createdId, offerFile);
-      setMessage("Offer uploaded successfully.");
-      await refresh();
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
-    }
-  }
-
-  async function onExtract() {
-    if (!createdId) return;
-    setError(null);
-    setMessage(null);
-    try {
-      await extractOffer(createdId);
-      setMessage("Offer extracted and request updated.");
-      await refresh();
-    } catch (e: any) {
-      setError(e?.message ?? String(e));
-    }
-  }
   const latestRequest = requests.length ? requests[0] : null;
   const olderRequests = requests.length > 1 ? requests.slice(1) : [];
 
@@ -99,7 +80,7 @@ export default function App() {
             <button onClick={onExtract}>Extract & autofill</button>
           </div>
         </div>
-      )}
+      </div>
 
       <hr style={{ margin: "16px 0" }} />
 
