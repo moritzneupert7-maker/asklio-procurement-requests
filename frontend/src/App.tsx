@@ -168,11 +168,6 @@ export default function App() {
       // Refresh requests
       const updatedRequests = await listRequests();
       setRequests(updatedRequests);
-      
-      // Remove from queue after 3 seconds
-      setTimeout(() => {
-        updateQueue(queueId, "completed");
-      }, 3000);
     } catch (error) {
       updateQueue(queueId, "failed");
       console.error("Upload failed:", error);
@@ -354,7 +349,7 @@ export default function App() {
             ].map((tab) => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
+                onClick={() => setActiveTab(tab.id as "overview" | "new" | "analytics" | "settings")}
                 className={`
                   flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors
                   ${
@@ -476,7 +471,6 @@ export default function App() {
                   <h3 className="text-lg leading-6 font-medium text-gray-900">Recent Requests</h3>
                   <div className="flex items-center gap-2">
                     <div className="relative">
-                      <SearchIcon />
                       <input
                         type="text"
                         placeholder="Search..."
