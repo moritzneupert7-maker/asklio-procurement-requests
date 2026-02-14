@@ -9,6 +9,7 @@ Status = Literal["Open", "In Progress", "Closed"]
 
 
 class OrderLineCreate(BaseModel):
+    product: Optional[str] = None
     description: str = Field(min_length=1)
     unit_price: Decimal = Field(gt=0)
     amount: int = Field(gt=0)
@@ -32,6 +33,7 @@ class StatusChange(BaseModel):
 # ---- Response models ----
 class OrderLineOut(BaseModel):
     id: int
+    product: Optional[str]
     description: str
     unit_price: Decimal
     amount: int

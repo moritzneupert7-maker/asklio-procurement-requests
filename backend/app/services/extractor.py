@@ -9,7 +9,8 @@ load_dotenv()
 
 
 class ExtractedOrderLine(BaseModel):
-    description: str
+    product: str  # Product name
+    description: str  # Full description/details
     unit_price: Decimal
     amount: int
     unit: Optional[str]
@@ -34,9 +35,24 @@ def extract_offer_text(text: str) -> OfferExtraction:
             {
                 "role": "system",
                 "content": (
-                    "Extract procurement offer data from the user's text. "
-                    "Return numbers as plain decimals (no currency symbols). "
-                    "If a field is missing, use null. Ensure totals are consistent."
+                    "You are an expert at extracting procurement offer data from documents. "
+                    "Extract all relevant information accurately from the provided text.\n\n"
+                    "IMPORTANT INSTRUCTIONS:\n"
+                    "- Return all monetary values as plain decimals without currency symbols (e.g., 150.00, not €150 or $150)\n"
+                    "- Extract the vendor name (company/organization providing the offer)\n"
+                    "- Extract VAT ID (Umsatzsteuer-Identifikationsnummer, USt.-ID, or similar tax identification number)\n"
+                    "- Extract the department name (requestor department, offered to, customer department)\n"
+                    "- For each order line/item, extract:\n"
+                    "  * product: Short product name/title (e.g., 'Adobe Photoshop License', 'Moosbild Mix-Moos')\n"
+                    "  * description: Complete description with all details and specifications\n"
+                    "  * unit_price: Price per single unit\n"
+                    "  * amount: Quantity ordered\n"
+                    "  * unit: Unit of measurement (e.g., 'licenses', 'Stk.', 'pcs')\n"
+                    "  * total_price: Total price for this line (unit_price × amount, after any discounts)\n"
+                    "- Calculate total_cost as the sum of all order line totals\n"
+                    "- Verify that total_cost matches the document's total amount\n"
+                    "- If a field is not found in the document, use null\n"
+                    "- Be precise with numbers - extract exact values from the document"
                 ),
             },
             {"role": "user", "content": text},
