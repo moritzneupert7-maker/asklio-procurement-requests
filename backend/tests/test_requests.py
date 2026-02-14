@@ -13,7 +13,13 @@ def test_create_request():
         "vendor_name": "Global Tech Solutions",
         "vendor_vat_id": "DE987654321",
         "order_lines": [
-            {"description": "Adobe Photoshop License", "unit_price": 150, "amount": 10, "unit": "licenses"},
+            {
+                "product": "Adobe Photoshop License",
+                "description": "Adobe Photoshop CC 2024 - 1 Year Subscription License with cloud storage",
+                "unit_price": 150,
+                "amount": 10,
+                "unit": "licenses"
+            },
         ],
     }
     r = client.post("/requests", json=payload)
@@ -21,6 +27,9 @@ def test_create_request():
     data = r.json()
     assert "id" in data
     assert data["current_status"] == "Open"
+    assert len(data["order_lines"]) == 1
+    assert data["order_lines"][0]["product"] == "Adobe Photoshop License"
+    assert "2024" in data["order_lines"][0]["description"]
 
 def test_status_change_creates_history():
     payload = {

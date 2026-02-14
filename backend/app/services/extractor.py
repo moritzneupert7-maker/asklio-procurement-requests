@@ -1,5 +1,6 @@
 from decimal import Decimal
 from typing import Optional, List
+import os
 
 from openai import OpenAI
 from pydantic import BaseModel
@@ -9,7 +10,8 @@ load_dotenv()
 
 
 class ExtractedOrderLine(BaseModel):
-    description: str
+    product: str  # Product name
+    description: str  # Full description/details
     unit_price: Decimal
     amount: int
     unit: Optional[str]
@@ -25,10 +27,19 @@ class OfferExtraction(BaseModel):
     total_cost: Decimal
 
 
-client = OpenAI()
+# Only initialize OpenAI client if API key is available
+client = None
+if os.getenv("OPENAI_API_KEY"):
+    client = OpenAI()
 
 
 def extract_offer_text(text: str) -> OfferExtraction:
+    if not client:
+        raise RuntimeError(
+            "OpenAI API key is not configured. "
+            "Please set OPENAI_API_KEY in your .env file or environment variables."
+        )
+    
     completion = client.chat.completions.parse(
         model="gpt-4o-mini",
         messages=[

@@ -1,9 +1,14 @@
 from dotenv import load_dotenv
 from openai import OpenAI
 from pydantic import BaseModel, Field
+import os
 
 load_dotenv()
-client = OpenAI()
+
+# Only initialize OpenAI client if API key is available
+client = None
+if os.getenv("OPENAI_API_KEY"):
+    client = OpenAI()
 
 
 class CommodityPrediction(BaseModel):
@@ -18,6 +23,12 @@ def predict_commodity_group_id(
     order_lines_text: str,
     commodity_groups_text: str,
 ) -> str:
+    if not client:
+        raise RuntimeError(
+            "OpenAI API key is not configured. "
+            "Please set OPENAI_API_KEY in your .env file or environment variables."
+        )
+    
     completion = client.chat.completions.parse(
         model="gpt-4o-mini",
         messages=[

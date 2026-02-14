@@ -6,7 +6,7 @@ export type ProcurementRequestCreate = {
   department: string;
   vendor_name: string;
   vendor_vat_id?: string;
-  order_lines: { description: string; unit_price: number; amount: number; unit?: string }[];
+  order_lines: { product?: string; description: string; unit_price: number; amount: number; unit?: string }[];
 };
 
 export async function createRequest(payload: ProcurementRequestCreate) {
