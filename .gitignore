@@ -206,7 +206,8 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-# SQLite database files
-*.db
+# Application artifacts
 backend/local.db
 backend/uploads/
+frontend/node_modules/
+frontend/dist/
