@@ -52,6 +52,13 @@ class StatusEventOut(BaseModel):
     class Config:
         from_attributes = True
 
+class CommodityGroupOut(BaseModel):
+    id: str
+    category: str
+    name: str
+    
+    class Config:
+        orm_mode = True
 
 class ProcurementRequestOut(BaseModel):
     id: int
@@ -60,12 +67,21 @@ class ProcurementRequestOut(BaseModel):
     department: str
     vendor_name: str
     vendor_vat_id: Optional[str]
-    commodity_group_id: Optional[str]
+    commodity_group_id: Optional[str] = None
+    commodity_group: Optional[CommodityGroupOut] = None
     total_cost: Decimal
     current_status: str
     created_at: datetime
     order_lines: List[OrderLineOut] = []
     status_events: List[StatusEventOut] = []
+    class Config:
+        orm_mode = True
+
+
+
 
     class Config:
         from_attributes = True
+
+class CommodityGroupSet(BaseModel):
+    commodity_group_id: str = Field(min_length=3, max_length=3)

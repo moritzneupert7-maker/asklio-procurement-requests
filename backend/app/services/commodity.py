@@ -1,32 +1,42 @@
-from pydantic import BaseModel
+from dotenv import load_dotenv
 from openai import OpenAI
+from pydantic import BaseModel, Field
 
+load_dotenv()
 client = OpenAI()
 
 
 class CommodityPrediction(BaseModel):
-    commodity_group_id: str  # must be one of the IDs you provide in the prompt
+    commodity_group_id: str = Field(pattern=r"^\d{3}$")
 
 
-def predict_commodity_group_id(title: str, department: str, vendor_name: str, lines_text: str, groups_text: str) -> str:
+def predict_commodity_group_id(
+    *,
+    title: str,
+    department: str,
+    vendor_name: str,
+    order_lines_text: str,
+    commodity_groups_text: str,
+) -> str:
     completion = client.chat.completions.parse(
         model="gpt-4o-mini",
         messages=[
             {
                 "role": "system",
                 "content": (
-                    "You are a procurement commodity classifier. "
-                    "Choose exactly one commodity group ID from the provided list."
+                    "You are a procurement commodity classifier.\n"
+                    "Pick exactly ONE commodity_group_id from the list provided by the user.\n"
+                    "Return only the JSON that matches the schema."
                 ),
             },
             {
                 "role": "user",
                 "content": (
-                    f"Commodity groups (ID | Category | Name):\n{groups_text}\n\n"
+                    f"Commodity groups (ID | Category | Name):\n{commodity_groups_text}\n\n"
                     f"Request title: {title}\n"
                     f"Department: {department}\n"
                     f"Vendor: {vendor_name}\n"
-                    f"Order lines: {lines_text}\n"
+                    f"Order lines: {order_lines_text}\n"
                 ),
             },
         ],
@@ -37,4 +47,4 @@ def predict_commodity_group_id(title: str, department: str, vendor_name: str, li
     if msg.parsed:
         return msg.parsed.commodity_group_id
 
-    raise RuntimeError(msg.refusal or "Model did not return a parsed commodity group.")
+    raise RuntimeError(msg.refusal or "No parsed commodity prediction returned")

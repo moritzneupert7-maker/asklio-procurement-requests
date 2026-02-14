@@ -1,5 +1,8 @@
 import os
 from pathlib import Path
+import pdfplumber 
+
+from ..models import CommodityGroup
 
 from fastapi import File, UploadFile
 
@@ -118,12 +121,30 @@ def extract_offer(request_id: int, db: Session = Depends(get_db)):
     if not path.exists():
         raise HTTPException(status_code=500, detail="Uploaded file not found on server")
 
-    # MVP: only .txt (you can add PDF/DOCX later)
-    if path.suffix.lower() != ".txt":
-        raise HTTPException(status_code=400, detail="MVP supports only .txt offers for extraction")
+    # Read offer text from file (.txt or text-based .pdf)
+    suffix = path.suffix.lower()
 
-    offer_text = path.read_text(encoding="utf-8", errors="ignore")
+    if suffix == ".txt":
+        offer_text = path.read_text(encoding="utf-8", errors="ignore")
 
+    elif suffix == ".pdf":
+        text_parts = []
+        with pdfplumber.open(str(path)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    text_parts.append(page_text)
+        offer_text = "\n\n".join(text_parts).strip()
+
+        if not offer_text:
+            raise HTTPException(
+                status_code=400,
+                detail="PDF has no extractable text (maybe scanned). Upload a text-based PDF or add OCR.",
+            )
+    else:
+        raise HTTPException(status_code=400, detail="Supported offer types: .txt, .pdf")
+
+    # LLM extraction
     try:
         extracted = extract_offer_text(offer_text)
     except Exception as e:
@@ -135,7 +156,7 @@ def extract_offer(request_id: int, db: Session = Depends(get_db)):
     if extracted.department:
         req.department = extracted.department
 
-    # Replace order lines
+    # Replace order lines + totals
     req.order_lines.clear()
     total_cost = Decimal("0.00")
     for line in extracted.order_lines:
@@ -151,21 +172,29 @@ def extract_offer(request_id: int, db: Session = Depends(get_db)):
         total_cost += line.total_price
     req.total_cost = total_cost.quantize(Decimal("0.01"))
 
-    # Predict commodity group
+    # Predict commodity group (auto-fill)
     groups = db.query(models.CommodityGroup).order_by(models.CommodityGroup.id).all()
     groups_text = "\n".join([f"{g.id} | {g.category} | {g.name}" for g in groups])
     lines_text = "; ".join([ol.description for ol in req.order_lines])
 
     try:
-        predicted_id = predict_commodity_group_id(req.title, req.department, req.vendor_name, lines_text, groups_text)
-        req.commodity_group_id = predicted_id
+        predicted = predict_commodity_group_id(
+            title=req.title,
+            department=req.department,
+            vendor_name=req.vendor_name,
+            order_lines_text=lines_text,
+            commodity_groups_text=groups_text,
+        )
+        if db.get(models.CommodityGroup, predicted):
+            req.commodity_group_id = predicted
     except Exception:
-        pass  # keep it optional for MVP
+        pass  # keep request usable even if prediction fails
 
     db.add(req)
     db.commit()
     db.refresh(req)
     return req
+
 
 
 
@@ -185,3 +214,20 @@ def change_status(request_id: int, payload: schemas.StatusChange, db: Session = 
     db.commit()
     db.refresh(req)
     return req
+
+@router.post("/{request_id}/commodity-group", response_model=schemas.ProcurementRequestOut)
+def set_commodity_group(request_id: int, payload: schemas.CommodityGroupSet, db: Session = Depends(get_db)):
+    req = db.get(models.ProcurementRequest, request_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+
+    cg = db.get(CommodityGroup, payload.commodity_group_id)
+    if not cg:
+        raise HTTPException(status_code=400, detail="Invalid commodity_group_id")
+
+    req.commodity_group_id = payload.commodity_group_id
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    return req
+
