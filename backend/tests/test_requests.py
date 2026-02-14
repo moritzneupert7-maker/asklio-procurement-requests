@@ -13,7 +13,7 @@ def test_create_request():
         "order_lines": [
             {
                 "product": "Adobe Photoshop License",
-                "description": "Adobe Photoshop License",
+                "description": "Adobe Photoshop CC 2024 - 1 Year Subscription License with cloud storage",
                 "unit_price": 150,
                 "amount": 10,
                 "unit": "licenses"
@@ -27,6 +27,7 @@ def test_create_request():
     assert data["current_status"] == "Open"
     assert len(data["order_lines"]) == 1
     assert data["order_lines"][0]["product"] == "Adobe Photoshop License"
+    assert "2024" in data["order_lines"][0]["description"]
 
 def test_status_change_creates_history():
     payload = {

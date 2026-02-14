@@ -24,7 +24,10 @@ def predict_commodity_group_id(
     commodity_groups_text: str,
 ) -> str:
     if not client:
-        raise RuntimeError("OpenAI API key is not configured. Please set OPENAI_API_KEY environment variable.")
+        raise RuntimeError(
+            "OpenAI API key is not configured. "
+            "Please set OPENAI_API_KEY in your .env file or environment variables."
+        )
     
     completion = client.chat.completions.parse(
         model="gpt-4o-mini",
