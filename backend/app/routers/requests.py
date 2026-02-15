@@ -145,6 +145,7 @@ async def create_from_offer(file: UploadFile = File(...), db: Session = Depends(
     for line in extracted.order_lines:
         req.order_lines.append(
             models.OrderLine(
+                product=line.product,
                 description=line.description,
                 unit_price=line.unit_price,
                 amount=line.amount,

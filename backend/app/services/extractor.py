@@ -42,18 +42,29 @@ def clean_monetary_value(v):
 class ExtractedOrderLine(BaseModel):
     product: str = Field(
         description=(
-            "The product name or title. Product names are often displayed as bold headings, "
-            "article names, or short labels that appear above detailed descriptions. "
-            "Examples include: 'Moosbild Mix-Moos 160x80', 'Adobe Photoshop License', "
-            "'Office Chair Model XY-200'. If no distinct product name exists, use the first "
-            "few meaningful words of the description (e.g., 'Printer paper A4')."
+            "The SHORT product name or title — this is the first prominent line/heading of the line item, "
+            "NOT the full description. In German quotes, this is typically the bold or first line in the "
+            "'Bezeichnung' column that appears BEFORE detailed specifications begin. "
+            "Examples from real documents: "
+            "'13\" MacBook Air: Apple M2 Chip – Space Grau', "
+            "'Moosbild \"70:30\" mit Schriftzug \"askLio\"', "
+            "'Moosbild Mix-Moos 160x80 cm', "
+            "'Logointegration \"asklio\" horizontal', "
+            "'Adobe Photoshop License'. "
+            "IMPORTANT: This must be a SHORT name (typically 3-10 words), NOT the full description. "
+            "If the line item text starts with a short product title followed by detailed specs, "
+            "extract ONLY the short title as the product. "
+            "This field must NEVER be empty, null, or '-'."
         )
     )
     description: str = Field(
         description=(
-            "The full description and details of the product or service, including "
-            "specifications, dimensions, materials, colours, quantities, or any other "
-            "relevant information stated in the line item."
+            "The detailed description and specifications that follow AFTER the product name. "
+            "This includes dimensions, materials, configurations, colours, technical specs, "
+            "and any other details. Do NOT repeat the product name in the description. "
+            "For example, if the product is 'Moosbild Mix-Moos 160x80 cm', the description would be "
+            "'Moosart: Mix-Moos, Außenabmessungen: ca. 160x80 cm, Rahmen: Holzrahmen MDF, "
+            "Rahmenfarbe: Weiß oder Schwarz, inkl. Befestigungsmittel'."
         )
     )
     unit_price: Decimal = Field(
@@ -162,10 +173,20 @@ CRITICAL RULES:
    - Do NOT compute by summing line items. The document's stated total takes precedence.
    - Common labels: 'Nettobetrag', 'Summe netto', 'Zwischensumme', 'Gesamtbetrag netto', 'Summe (netto)', 'Subtotal'.
 
-4. PRODUCT NAMES:
-   - Extract short product names or titles — often bold headings, article numbers with names, or short labels before detailed descriptions.
-   - Examples: 'Moosbild Mix-Moos 160x80', 'Adobe Photoshop License', 'Office Chair Model XY-200'.
-   - If no distinct product name exists, use the first few meaningful words of the description.
+4. PRODUCT NAMES (CRITICAL — must not be empty):
+   - Each line item in a German quote has TWO parts: a SHORT product name/title, and a longer description.
+   - The PRODUCT NAME is the first prominent line or heading of the line item — typically bold text,
+     or the first line in the 'Bezeichnung'/'Produkt' column before specs begin.
+   - The product name is typically 3-10 words long. It is NOT the full specification text.
+   - NEVER return an empty product name, '-', or null for the product field.
+   - Real examples of correct product names:
+     * '13" MacBook Air: Apple M2 Chip – Space Grau' (NOT the full configuration bullet list)
+     * 'Moosbild "70:30" mit Schriftzug "askLio"' (NOT the paragraph about Waldmoos etc.)
+     * 'Moosbild Mix-Moos 160x80 cm' (NOT 'Moosart: Mix-Moos, Außenabmessungen...')
+     * 'Logointegration "asklio" horizontal' (NOT 'Gesamtgröße 105 cm Breite...')
+   - The DESCRIPTION field gets everything AFTER the product name (specs, dimensions, materials, etc.).
+   - If you cannot clearly distinguish a product name from the description, use the first meaningful
+     phrase (first line or first ~5-8 words) as the product name.
 
 5. MONETARY VALUES:
    - Return all monetary values as plain decimals without currency symbols (e.g., 1767.26 not €1.767,26).
