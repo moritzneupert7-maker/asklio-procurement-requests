@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { create } from "zustand";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
-import { createFromOffer, createRequest, listRequests, listCommodityGroups } from "./api";
+import { createFromOffer, createRequest, listRequests, listCommodityGroups, predictCommodityGroup, deleteAllRequests, updateRequestStatus, chatWithAsklio } from "./api";
 
 // Icons as simple SVG components
 const OverviewIcon = () => (
@@ -128,9 +128,9 @@ export default function App() {
   // Form states for New Request tab
   const [manualForm, setManualForm] = useState({
     title: "",
-    requestor_name: "",
+    requestor_name: "Moritz Neupert",
     vendor_name: "",
-    department: "",
+    department: "Marketing",
     total_cost: "",
     vendor_vat_id: "",
     commodity_group_id: "",
@@ -145,6 +145,15 @@ export default function App() {
   const [dragActive, setDragActive] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const redirectTimeoutRef = useRef<number | null>(null);
+  
+  // Chat state
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<Array<{ role: "user" | "assistant"; content: string }>>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  
+  // Debounce ref for title prediction
+  const titleDebounceRef = useRef<number | null>(null);
   
   const { requests, queue, successMessage, setRequests, addToQueue, updateQueue, setSuccessMessage } = useStore();
 
@@ -238,6 +247,18 @@ export default function App() {
 
   const handleManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Form validation
+    if (!manualForm.title.trim() || 
+        !manualForm.requestor_name.trim() || 
+        !manualForm.vendor_name.trim() || 
+        !manualForm.department.trim() || 
+        !manualForm.total_cost || 
+        parseFloat(manualForm.total_cost) <= 0) {
+      alert("Request cannot be created, due to missing information");
+      return;
+    }
+    
     setIsSubmitting(true);
     
     try {
@@ -255,12 +276,12 @@ export default function App() {
       
       setSuccessMessage("Request created successfully!");
       
-      // Reset form
+      // Reset form with prefilled values
       setManualForm({
         title: "",
-        requestor_name: "",
+        requestor_name: "Moritz Neupert",
         vendor_name: "",
-        department: "",
+        department: "Marketing",
         total_cost: "",
         vendor_vat_id: "",
         commodity_group_id: "",
@@ -271,8 +292,68 @@ export default function App() {
       setRequests(updatedRequests);
     } catch (error) {
       console.error("Failed to create request:", error);
+      alert("Failed to create request. Please try again.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  // Handle title change with debounced commodity prediction
+  const handleTitleChange = (newTitle: string) => {
+    setManualForm({ ...manualForm, title: newTitle });
+    
+    // Clear existing timeout
+    if (titleDebounceRef.current) {
+      clearTimeout(titleDebounceRef.current);
+    }
+    
+    // Set new timeout for prediction
+    if (newTitle.trim().length > 0) {
+      titleDebounceRef.current = window.setTimeout(async () => {
+        try {
+          const result = await predictCommodityGroup(newTitle);
+          setManualForm(prev => ({ ...prev, commodity_group_id: result.commodity_group_id }));
+        } catch (error) {
+          console.error("Failed to predict commodity group:", error);
+        }
+      }, 500);
+    }
+  };
+
+  // Handle Clear History
+  const handleClearHistory = async () => {
+    if (!confirm("Are you sure you want to delete all procurement requests? This action cannot be undone.")) {
+      return;
+    }
+    
+    try {
+      await deleteAllRequests();
+      setSuccessMessage("All requests deleted successfully!");
+      const updatedRequests = await listRequests();
+      setRequests(updatedRequests);
+    } catch (error) {
+      console.error("Failed to delete requests:", error);
+      alert("Failed to delete requests. Please try again.");
+    }
+  };
+
+  // Handle chat submission
+  const handleChatSubmit = async () => {
+    if (!chatInput.trim()) return;
+    
+    const userMessage = chatInput.trim();
+    setChatInput("");
+    setChatMessages(prev => [...prev, { role: "user", content: userMessage }]);
+    setIsChatLoading(true);
+    
+    try {
+      const response = await chatWithAsklio(userMessage);
+      setChatMessages(prev => [...prev, { role: "assistant", content: response.reply }]);
+    } catch (error) {
+      console.error("Chat failed:", error);
+      setChatMessages(prev => [...prev, { role: "assistant", content: "Sorry, I'm having trouble connecting right now. Please try again." }]);
+    } finally {
+      setIsChatLoading(false);
     }
   };
 
@@ -332,12 +413,18 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#F8F7FF]">
       {/* Header */}
-      <header className="bg-white border-b border-violet-100 shadow-sm">
+      <header className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-violet-600 italic">ProcurementPortal</h1>
-              <p className="text-sm text-gray-600 mt-1">Efficient Request Management</p>
+            <div className="flex items-center gap-3">
+              {/* AskLio Logo - Crescent Moon + Text */}
+              <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="black" stroke="black"/>
+              </svg>
+              <div>
+                <h1 className="text-3xl font-bold text-black">askLio</h1>
+                <p className="text-sm text-gray-600 mt-1">Efficient Request Management</p>
+              </div>
             </div>
           </div>
         </div>
@@ -386,7 +473,7 @@ export default function App() {
                   flex items-center gap-2 py-4 px-1 border-b-2 font-medium text-sm transition-colors
                   ${
                     activeTab === tab.id
-                      ? "border-violet-500 text-violet-600"
+                      ? "border-black text-black"
                       : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
                   }
                 `}
@@ -410,7 +497,7 @@ export default function App() {
                 <div className="p-5">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
-                      <div className="w-12 h-12 bg-violet-100 rounded-lg flex items-center justify-center">
+                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                         <span className="text-2xl">€</span>
                       </div>
                     </div>
@@ -508,7 +595,7 @@ export default function App() {
                         placeholder="Search..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-violet-500 focus:border-violet-500"
+                        className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
                       />
                       <div className="absolute left-3 top-1/2 transform -translate-y-1/2 pointer-events-none">
                         <SearchIcon />
@@ -516,6 +603,12 @@ export default function App() {
                     </div>
                     <button className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50">
                       <FilterIcon />
+                    </button>
+                    <button 
+                      onClick={handleClearHistory}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium"
+                    >
+                      Clear History
                     </button>
                   </div>
                 </div>
@@ -556,18 +649,32 @@ export default function App() {
                               €{Number(request.total_cost).toFixed(2)}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <span
-                                className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(
+                              <select
+                                value={request.current_status}
+                                onChange={async (e) => {
+                                  try {
+                                    await updateRequestStatus(request.id, e.target.value, "User");
+                                    const updatedRequests = await listRequests();
+                                    setRequests(updatedRequests);
+                                    setSuccessMessage("Status updated successfully!");
+                                  } catch (error) {
+                                    console.error("Failed to update status:", error);
+                                    alert("Failed to update status");
+                                  }
+                                }}
+                                className={`px-2 py-1 text-xs leading-5 font-semibold rounded-full border-0 ${getStatusColor(
                                   request.current_status
                                 )}`}
                               >
-                                {request.current_status}
-                              </span>
+                                <option value="Open">Open</option>
+                                <option value="In Progress">In Progress</option>
+                                <option value="Closed">Closed</option>
+                              </select>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               <button
                                 onClick={() => setSelectedRequest(request)}
-                                className="inline-flex items-center px-3 py-1.5 border border-violet-600 text-violet-600 rounded-md hover:bg-violet-50 transition-colors text-sm font-medium"
+                                className="inline-flex items-center px-3 py-1.5 border border-blue-600 text-blue-600 rounded-md hover:bg-blue-50 transition-colors text-sm font-medium"
                               >
                                 <EyeIcon />
                                 <span className="ml-1.5">View</span>
@@ -597,12 +704,12 @@ export default function App() {
                 onDrop={handleDrop}
                 className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
                   dragActive
-                    ? "border-violet-500 bg-violet-50"
-                    : "border-gray-300 hover:border-violet-400"
+                    ? "border-blue-500 bg-blue-50"
+                    : "border-gray-300 hover:border-blue-400"
                 }`}
               >
                 <div className="flex flex-col items-center">
-                  <div className="text-violet-500 mb-4">
+                  <div className="text-blue-500 mb-4">
                     <UploadIcon />
                   </div>
                   <p className="text-sm text-gray-600 mb-2">
@@ -652,8 +759,8 @@ export default function App() {
                       type="text"
                       required
                       value={manualForm.title}
-                      onChange={(e) => setManualForm({ ...manualForm, title: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-violet-500 focus:border-violet-500"
+                      onChange={(e) => handleTitleChange(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
 
@@ -668,7 +775,7 @@ export default function App() {
                       onChange={(e) =>
                         setManualForm({ ...manualForm, requestor_name: e.target.value })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-violet-500 focus:border-violet-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
 
@@ -683,7 +790,7 @@ export default function App() {
                       onChange={(e) =>
                         setManualForm({ ...manualForm, vendor_name: e.target.value })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-violet-500 focus:border-violet-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
 
@@ -698,7 +805,7 @@ export default function App() {
                       onChange={(e) =>
                         setManualForm({ ...manualForm, department: e.target.value })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-violet-500 focus:border-violet-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
 
@@ -714,7 +821,7 @@ export default function App() {
                       onChange={(e) =>
                         setManualForm({ ...manualForm, total_cost: e.target.value })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-violet-500 focus:border-violet-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
 
@@ -726,7 +833,7 @@ export default function App() {
                       onChange={(e) =>
                         setManualForm({ ...manualForm, vendor_vat_id: e.target.value })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-violet-500 focus:border-violet-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
 
@@ -739,7 +846,7 @@ export default function App() {
                       onChange={(e) =>
                         setManualForm({ ...manualForm, commodity_group_id: e.target.value })
                       }
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-violet-500 focus:border-violet-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="">Select a commodity group</option>
                       {commodityGroups.map((group) => (
@@ -755,7 +862,7 @@ export default function App() {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="px-6 py-3 bg-violet-600 text-white rounded-md hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                    className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                   >
                     {isSubmitting ? "Submitting..." : "Submit Request"}
                   </button>
@@ -774,7 +881,7 @@ export default function App() {
                 <div className="p-5">
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
-                      <div className="w-12 h-12 bg-violet-100 rounded-lg flex items-center justify-center">
+                      <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                         <span className="text-2xl">€</span>
                       </div>
                     </div>
@@ -914,7 +1021,7 @@ export default function App() {
                     value={settings.apiKey}
                     onChange={(e) => setSettings({ ...settings, apiKey: e.target.value })}
                     placeholder="sk-..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-violet-500 focus:border-violet-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
 
@@ -929,7 +1036,7 @@ export default function App() {
                       setSettings({ ...settings, extractionPrompt: e.target.value })
                     }
                     placeholder="Enter your custom data extraction prompt..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-violet-500 focus:border-violet-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
 
@@ -939,7 +1046,7 @@ export default function App() {
                     onClick={() => {
                       setSuccessMessage("Settings saved successfully!");
                     }}
-                    className="px-6 py-3 bg-violet-600 text-white rounded-md hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500 font-medium"
+                    className="px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 font-medium"
                   >
                     Save Settings
                   </button>
@@ -1034,14 +1141,14 @@ export default function App() {
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Order Lines</h3>
                 <div className="overflow-x-auto border border-gray-200 rounded-lg">
                   <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-violet-50">
+                    <thead className="bg-blue-50">
                       <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-violet-700 uppercase tracking-wider">Product</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-violet-700 uppercase tracking-wider">Description</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-violet-700 uppercase tracking-wider">Unit Price</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-violet-700 uppercase tracking-wider">Amount</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-violet-700 uppercase tracking-wider">Unit</th>
-                        <th className="px-4 py-3 text-right text-xs font-medium text-violet-700 uppercase tracking-wider">Total Price</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-blue-700 uppercase tracking-wider">Product</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-blue-700 uppercase tracking-wider">Description</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-blue-700 uppercase tracking-wider">Unit Price</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-blue-700 uppercase tracking-wider">Amount</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-blue-700 uppercase tracking-wider">Unit</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-blue-700 uppercase tracking-wider">Total Price</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -1067,7 +1174,7 @@ export default function App() {
             <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end">
               <button
                 onClick={() => setSelectedRequest(null)}
-                className="px-4 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700 transition-colors font-medium"
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors font-medium"
               >
                 Close
               </button>
@@ -1075,6 +1182,94 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* AskLio Chat Widget */}
+      <div className="fixed bottom-6 right-6 z-50">
+        {!isChatOpen ? (
+          <button
+            onClick={() => setIsChatOpen(true)}
+            className="bg-black text-white rounded-full p-4 shadow-lg hover:bg-gray-800 transition-all"
+            title="Chat with AskLio"
+          >
+            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="currentColor" stroke="currentColor"/>
+            </svg>
+          </button>
+        ) : (
+          <div className="bg-white rounded-lg shadow-2xl w-96 h-[500px] flex flex-col">
+            {/* Chat Header */}
+            <div className="bg-black text-white p-4 rounded-t-lg flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" fill="white" stroke="white"/>
+                </svg>
+                <span className="font-semibold">AskLio</span>
+              </div>
+              <button
+                onClick={() => setIsChatOpen(false)}
+                className="text-white hover:text-gray-300"
+              >
+                <XIcon />
+              </button>
+            </div>
+
+            {/* Chat Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {chatMessages.length === 0 && (
+                <div className="text-center text-gray-500 py-8">
+                  <p className="text-sm">Hi! I'm AskLio, your procurement assistant.</p>
+                  <p className="text-sm mt-2">Ask me about your requests or procurement policies!</p>
+                </div>
+              )}
+              {chatMessages.map((msg, idx) => (
+                <div
+                  key={idx}
+                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[80%] rounded-lg p-3 ${
+                      msg.role === "user"
+                        ? "bg-black text-white"
+                        : "bg-gray-100 text-gray-900"
+                    }`}
+                  >
+                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                  </div>
+                </div>
+              ))}
+              {isChatLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 rounded-lg p-3">
+                    <SpinnerIcon />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Chat Input */}
+            <div className="p-4 border-t border-gray-200">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyPress={(e) => e.key === "Enter" && handleChatSubmit()}
+                  placeholder="Type your message..."
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-black focus:border-black text-sm"
+                  disabled={isChatLoading}
+                />
+                <button
+                  onClick={handleChatSubmit}
+                  disabled={isChatLoading || !chatInput.trim()}
+                  className="bg-black text-white px-4 py-2 rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Send
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
