@@ -128,7 +128,7 @@ async def create_from_offer(file: UploadFile = File(...), db: Session = Depends(
 
     # Create procurement request with defaults + extracted data
     requestor_name = "Moritz Neupert"
-    department = extracted.department or "Marketing"
+    department = "Marketing"
 
     req = models.ProcurementRequest(
         requestor_name=requestor_name,
@@ -281,8 +281,6 @@ def extract_offer(request_id: int, db: Session = Depends(get_db)):
     req.vendor_vat_id = extracted.vendor_vat_id
     if extracted.title:
         req.title = extracted.title
-    if extracted.department:
-        req.department = extracted.department
 
     # Replace order lines + totals
     req.order_lines.clear()
