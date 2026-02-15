@@ -47,9 +47,16 @@ const UploadIcon = () => (
   </svg>
 );
 
-const ChevronDownIcon = () => (
+const EyeIcon = () => (
   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+  </svg>
+);
+
+const XIcon = () => (
+  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
   </svg>
 );
 
@@ -73,7 +80,7 @@ interface ProcurementRequest {
   total_cost: number;
   current_status: string;
   created_at: string;
-  order_lines: Array<{ product?: string; description: string; unit_price: number; amount: number; unit?: string }>;
+  order_lines: Array<{ product?: string; description: string; unit_price: number; amount: number; unit?: string; total_price: number }>;
 }
 
 interface QueueItem {
@@ -115,7 +122,7 @@ const useStore = create<AppStore>((set) => ({
 export default function App() {
   const [activeTab, setActiveTab] = useState<"overview" | "new" | "analytics" | "settings">("overview");
   const [searchQuery, setSearchQuery] = useState("");
-  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [selectedRequest, setSelectedRequest] = useState<ProcurementRequest | null>(null);
   const [commodityGroups, setCommodityGroups] = useState<CommodityGroup[]>([]);
   
   // Form states for New Request tab
@@ -155,6 +162,18 @@ export default function App() {
     };
     fetchData();
   }, [setRequests]);
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedRequest) {
+        setSelectedRequest(null);
+      }
+    };
+    
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [selectedRequest]);
 
   const handleFileUpload = async (file: File) => {
     const queueId = `${Date.now()}-${file.name}`;
@@ -232,16 +251,6 @@ export default function App() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const toggleRowExpansion = (id: number) => {
-    const newExpanded = new Set(expandedRows);
-    if (newExpanded.has(id)) {
-      newExpanded.delete(id);
-    } else {
-      newExpanded.add(id);
-    }
-    setExpandedRows(newExpanded);
   };
 
   // Filter requests based on search query
@@ -534,37 +543,14 @@ export default function App() {
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                               <button
-                                onClick={() => toggleRowExpansion(request.id)}
-                                className="text-violet-600 hover:text-violet-900"
+                                onClick={() => setSelectedRequest(request)}
+                                className="inline-flex items-center px-3 py-1.5 border border-violet-600 text-violet-600 rounded-md hover:bg-violet-50 transition-colors text-sm font-medium"
                               >
-                                <ChevronDownIcon />
+                                <EyeIcon />
+                                <span className="ml-1.5">View</span>
                               </button>
                             </td>
                           </tr>
-                          {expandedRows.has(request.id) && (
-                            <tr>
-                              <td colSpan={5} className="px-6 py-4 bg-gray-50">
-                                <div className="grid grid-cols-2 gap-4 text-sm">
-                                  <div>
-                                    <span className="font-medium text-gray-700">Commodity:</span>{" "}
-                                    {request.commodity_group?.name || "-"}
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-gray-700">Department:</span>{" "}
-                                    {request.department}
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-gray-700">Requestor:</span>{" "}
-                                    {request.requestor_name}
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-gray-700">VAT ID:</span>{" "}
-                                    {request.vendor_vat_id || "-"}
-                                  </div>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
                         </>
                       ))}
                     </tbody>
@@ -940,6 +926,129 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Request Profile Modal */}
+      {selectedRequest && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setSelectedRequest(null)}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold text-gray-900">{selectedRequest.title}</h2>
+                  <span
+                    className={`px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(
+                      selectedRequest.current_status
+                    )}`}
+                  >
+                    {selectedRequest.current_status}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-500 mt-1">Request ID: {selectedRequest.id}</p>
+              </div>
+              <button
+                onClick={() => setSelectedRequest(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <XIcon />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="px-6 py-6 space-y-6">
+              {/* Metadata Section */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Request Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Requestor Name</span>
+                    <p className="mt-1 text-sm font-medium text-gray-900">{selectedRequest.requestor_name}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Vendor Name</span>
+                    <p className="mt-1 text-sm font-medium text-gray-900">{selectedRequest.vendor_name}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">VAT ID</span>
+                    <p className="mt-1 text-sm font-medium text-gray-900">{selectedRequest.vendor_vat_id || "-"}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Department</span>
+                    <p className="mt-1 text-sm font-medium text-gray-900">{selectedRequest.department}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Commodity Group</span>
+                    <p className="mt-1 text-sm font-medium text-gray-900">
+                      {selectedRequest.commodity_group ? 
+                        `${selectedRequest.commodity_group.name} (${selectedRequest.commodity_group.category})` : 
+                        "-"}
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Total Cost</span>
+                    <p className="mt-1 text-sm font-medium text-gray-900">€{Number(selectedRequest.total_cost).toFixed(2)}</p>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4 md:col-span-2">
+                    <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Created At</span>
+                    <p className="mt-1 text-sm font-medium text-gray-900">
+                      {new Date(selectedRequest.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Order Lines Section */}
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Order Lines</h3>
+                <div className="overflow-x-auto border border-gray-200 rounded-lg">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-violet-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-violet-700 uppercase tracking-wider">Product</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-violet-700 uppercase tracking-wider">Description</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-violet-700 uppercase tracking-wider">Unit Price</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-violet-700 uppercase tracking-wider">Amount</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-violet-700 uppercase tracking-wider">Unit</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-violet-700 uppercase tracking-wider">Total Price</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {selectedRequest.order_lines.map((line, idx) => (
+                        <tr key={idx} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-sm text-gray-900">{line.product || "-"}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900">{line.description}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900 text-right">€{Number(line.unit_price).toFixed(2)}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900 text-right">{line.amount}</td>
+                          <td className="px-4 py-3 text-sm text-gray-900">{line.unit || "-"}</td>
+                          <td className="px-4 py-3 text-sm font-medium text-gray-900 text-right">
+                            €{Number(line.total_price).toFixed(2)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex justify-end">
+              <button
+                onClick={() => setSelectedRequest(null)}
+                className="px-4 py-2 bg-violet-600 text-white rounded-md hover:bg-violet-700 transition-colors font-medium"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
