@@ -84,6 +84,15 @@ async def create_from_offer(file: UploadFile = File(...), db: Session = Depends(
         with pdfplumber.open(io.BytesIO(contents)) as pdf:
             for page in pdf.pages:
                 page_text = page.extract_text() or ""
+                
+                # Also extract tables to capture structured pricing data
+                tables = page.extract_tables()
+                if tables:
+                    for table in tables:
+                        for row in table:
+                            cleaned = [str(cell).strip() if cell else "" for cell in row]
+                            page_text += "\n" + " | ".join(cleaned)
+                
                 if page_text.strip():
                     text_parts.append(page_text)
         offer_text = "\n\n".join(text_parts).strip()
@@ -240,6 +249,15 @@ def extract_offer(request_id: int, db: Session = Depends(get_db)):
         with pdfplumber.open(str(path)) as pdf:
             for page in pdf.pages:
                 page_text = page.extract_text() or ""
+                
+                # Also extract tables to capture structured pricing data
+                tables = page.extract_tables()
+                if tables:
+                    for table in tables:
+                        for row in table:
+                            cleaned = [str(cell).strip() if cell else "" for cell in row]
+                            page_text += "\n" + " | ".join(cleaned)
+                
                 if page_text.strip():
                     text_parts.append(page_text)
         offer_text = "\n\n".join(text_parts).strip()
