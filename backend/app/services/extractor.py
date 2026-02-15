@@ -10,6 +10,35 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def clean_monetary_value(v):
+    """
+    Clean monetary values by removing currency symbols and handling European number formats.
+    
+    This validator is designed for German/European documents where:
+    - Dots are thousands separators: 1.767,26 = 1767.26
+    - Commas are decimal separators: 150,00 = 150.00
+    
+    Note: This will NOT work correctly for US-formatted numbers like "1,234.56".
+    The system is designed for German procurement documents as per EXTRACTION_SYSTEM_PROMPT.
+    """
+    if isinstance(v, (int, float)):
+        return v
+    if isinstance(v, str):
+        # Strip currency symbols
+        v = re.sub(r'[€$£]', '', v)
+        # Strip currency text
+        v = re.sub(r'\s*(EUR|USD|GBP|CHF)\s*', '', v, flags=re.IGNORECASE)
+        v = v.strip()
+        # Handle European number format: 1.767,26 → 1767.26
+        if ',' in v and '.' in v:
+            v = v.replace('.', '').replace(',', '.')
+        # Handle comma-only decimal: 150,00 → 150.00
+        elif ',' in v:
+            v = v.replace(',', '.')
+        return v
+    return v
+
+
 class ExtractedOrderLine(BaseModel):
     product: str = Field(
         description=(
@@ -52,24 +81,9 @@ class ExtractedOrderLine(BaseModel):
 
     @field_validator("unit_price", "total_price", mode="before")
     @classmethod
-    def clean_monetary_value(cls, v):
-        """Clean monetary values by removing currency symbols and handling European number formats."""
-        if isinstance(v, (int, float)):
-            return v
-        if isinstance(v, str):
-            # Strip currency symbols
-            v = re.sub(r'[€$£]', '', v)
-            # Strip currency text
-            v = re.sub(r'\s*(EUR|USD|GBP|CHF)\s*', '', v, flags=re.IGNORECASE)
-            v = v.strip()
-            # Handle European number format: 1.767,26 → 1767.26
-            if ',' in v and '.' in v:
-                v = v.replace('.', '').replace(',', '.')
-            # Handle comma-only decimal: 150,00 → 150.00
-            elif ',' in v:
-                v = v.replace(',', '.')
-            return v
-        return v
+    def validate_monetary_value(cls, v):
+        """Validate and clean monetary values."""
+        return clean_monetary_value(v)
 
 
 class OfferExtraction(BaseModel):
@@ -123,24 +137,9 @@ class OfferExtraction(BaseModel):
 
     @field_validator("total_cost", mode="before")
     @classmethod
-    def clean_monetary_value(cls, v):
-        """Clean monetary values by removing currency symbols and handling European number formats."""
-        if isinstance(v, (int, float)):
-            return v
-        if isinstance(v, str):
-            # Strip currency symbols
-            v = re.sub(r'[€$£]', '', v)
-            # Strip currency text
-            v = re.sub(r'\s*(EUR|USD|GBP|CHF)\s*', '', v, flags=re.IGNORECASE)
-            v = v.strip()
-            # Handle European number format: 1.767,26 → 1767.26
-            if ',' in v and '.' in v:
-                v = v.replace('.', '').replace(',', '.')
-            # Handle comma-only decimal: 150,00 → 150.00
-            elif ',' in v:
-                v = v.replace(',', '.')
-            return v
-        return v
+    def validate_monetary_value(cls, v):
+        """Validate and clean monetary values."""
+        return clean_monetary_value(v)
 
 
 EXTRACTION_SYSTEM_PROMPT = """You are a procurement document analyst specializing in extracting structured data from vendor quotes, offers, and invoices — primarily in German but also English.
