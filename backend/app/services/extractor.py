@@ -1,9 +1,10 @@
 from decimal import Decimal
 from typing import Optional, List
 import os
+import re
 
 from openai import OpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -48,6 +49,27 @@ class ExtractedOrderLine(BaseModel):
             "This should be the line item's stated total, not a calculated value."
         )
     )
+
+    @field_validator("unit_price", "total_price", mode="before")
+    @classmethod
+    def clean_monetary_value(cls, v):
+        """Clean monetary values by removing currency symbols and handling European number formats."""
+        if isinstance(v, (int, float)):
+            return v
+        if isinstance(v, str):
+            # Strip currency symbols
+            v = re.sub(r'[€$£]', '', v)
+            # Strip currency text
+            v = re.sub(r'\s*(EUR|USD|GBP|CHF)\s*', '', v, flags=re.IGNORECASE)
+            v = v.strip()
+            # Handle European number format: 1.767,26 → 1767.26
+            if ',' in v and '.' in v:
+                v = v.replace('.', '').replace(',', '.')
+            # Handle comma-only decimal: 150,00 → 150.00
+            elif ',' in v:
+                v = v.replace(',', '.')
+            return v
+        return v
 
 
 class OfferExtraction(BaseModel):
@@ -98,6 +120,27 @@ class OfferExtraction(BaseModel):
             "Return as a plain decimal number without currency symbols (e.g., 1767.26 not €1.767,26)."
         )
     )
+
+    @field_validator("total_cost", mode="before")
+    @classmethod
+    def clean_monetary_value(cls, v):
+        """Clean monetary values by removing currency symbols and handling European number formats."""
+        if isinstance(v, (int, float)):
+            return v
+        if isinstance(v, str):
+            # Strip currency symbols
+            v = re.sub(r'[€$£]', '', v)
+            # Strip currency text
+            v = re.sub(r'\s*(EUR|USD|GBP|CHF)\s*', '', v, flags=re.IGNORECASE)
+            v = v.strip()
+            # Handle European number format: 1.767,26 → 1767.26
+            if ',' in v and '.' in v:
+                v = v.replace('.', '').replace(',', '.')
+            # Handle comma-only decimal: 150,00 → 150.00
+            elif ',' in v:
+                v = v.replace(',', '.')
+            return v
+        return v
 
 
 EXTRACTION_SYSTEM_PROMPT = """You are a procurement document analyst specializing in extracting structured data from vendor quotes, offers, and invoices — primarily in German but also English.

@@ -60,7 +60,7 @@ class CommodityGroupOut(BaseModel):
     name: str
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ProcurementRequestOut(BaseModel):
     id: int
@@ -76,12 +76,6 @@ class ProcurementRequestOut(BaseModel):
     created_at: datetime
     order_lines: List[OrderLineOut] = []
     status_events: List[StatusEventOut] = []
-    class Config:
-        orm_mode = True
-
-
-
-
     class Config:
         from_attributes = True
 
