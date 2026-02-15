@@ -60,3 +60,41 @@ export async function listCommodityGroups() {
   if (!res.ok) throw new Error(await res.text());
   return res.json();
 }
+
+export async function predictCommodityGroup(title: string) {
+  const res = await fetch(`${API_BASE}/requests/predict-commodity-group`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function deleteAllRequests() {
+  const res = await fetch(`${API_BASE}/requests`, {
+    method: "DELETE",
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function updateRequestStatus(requestId: number, toStatus: string, changedBy: string) {
+  const res = await fetch(`${API_BASE}/requests/${requestId}/status`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ to_status: toStatus, changed_by: changedBy }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
+export async function chatWithAsklio(message: string) {
+  const res = await fetch(`${API_BASE}/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}

@@ -81,3 +81,15 @@ class ProcurementRequestOut(BaseModel):
 
 class CommodityGroupSet(BaseModel):
     commodity_group_id: str = Field(min_length=3, max_length=3)
+
+class CommodityGroupPredictRequest(BaseModel):
+    title: str = Field(min_length=1)
+
+class CommodityGroupPredictResponse(BaseModel):
+    commodity_group_id: str
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1)
+
+class ChatResponse(BaseModel):
+    reply: str

@@ -357,3 +357,33 @@ def set_commodity_group(request_id: int, payload: schemas.CommodityGroupSet, db:
     db.refresh(req)
     return req
 
+
+@router.post("/predict-commodity-group", response_model=schemas.CommodityGroupPredictResponse)
+def predict_commodity_group_from_title(payload: schemas.CommodityGroupPredictRequest, db: Session = Depends(get_db)):
+    """Predict commodity group based solely on the request title."""
+    groups = db.query(models.CommodityGroup).order_by(models.CommodityGroup.id).all()
+    groups_text = "\n".join([f"{g.id} | {g.category} | {g.name}" for g in groups])
+    
+    try:
+        predicted = predict_commodity_group_id(
+            title=payload.title,
+            department="",
+            vendor_name="",
+            order_lines_text="",
+            commodity_groups_text=groups_text,
+        )
+        if db.get(models.CommodityGroup, predicted):
+            return {"commodity_group_id": predicted}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Prediction failed: {e}")
+    
+    raise HTTPException(status_code=502, detail="Could not predict commodity group")
+
+
+@router.delete("")
+def delete_all_requests(db: Session = Depends(get_db)):
+    """Delete all procurement requests."""
+    db.query(models.ProcurementRequest).delete()
+    db.commit()
+    return {"message": "All requests deleted successfully"}
+
