@@ -3,28 +3,139 @@ from typing import Optional, List
 import os
 
 from openai import OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from dotenv import load_dotenv
 load_dotenv()
 
 
 class ExtractedOrderLine(BaseModel):
-    product: str  # Product name
-    description: str  # Full description/details
-    unit_price: Decimal
-    amount: int
-    unit: Optional[str]
-    total_price: Decimal
+    product: str = Field(
+        description=(
+            "The product name or title. Product names are often displayed as bold headings, "
+            "article names, or short labels that appear above detailed descriptions. "
+            "Examples include: 'Moosbild Mix-Moos 160x80', 'Adobe Photoshop License', "
+            "'Office Chair Model XY-200'. If no distinct product name exists, use the first "
+            "few meaningful words of the description (e.g., 'Printer paper A4')."
+        )
+    )
+    description: str = Field(
+        description=(
+            "The full description and details of the product or service, including "
+            "specifications, dimensions, materials, colours, quantities, or any other "
+            "relevant information stated in the line item."
+        )
+    )
+    unit_price: Decimal = Field(
+        description=(
+            "The unit price per single item as stated on the document. "
+            "Return as a plain decimal number without currency symbols (e.g., 150.00 not €150,00)."
+        )
+    )
+    amount: int = Field(
+        description="The quantity or amount of this item being ordered."
+    )
+    unit: Optional[str] = Field(
+        description=(
+            "The unit of measurement for the amount (e.g., 'pcs', 'licenses', 'hours', 'kg', 'm²'). "
+            "Return null if not specified."
+        )
+    )
+    total_price: Decimal = Field(
+        description=(
+            "The net total price for this specific line item as stated on the document. "
+            "Return as a plain decimal number without currency symbols. "
+            "This should be the line item's stated total, not a calculated value."
+        )
+    )
 
 
 class OfferExtraction(BaseModel):
-    title: str
-    vendor_name: str
-    vendor_vat_id: Optional[str]
-    department: Optional[str]
-    order_lines: List[ExtractedOrderLine]
-    total_cost: Decimal
+    title: str = Field(
+        description=(
+            "Generate a concise, descriptive procurement request title that summarizes "
+            "the purpose of the offer. Examples: 'Office Furniture Purchase', "
+            "'Annual IT Support Contract', 'Marketing Materials Order', "
+            "'Moosbild Installation and Maintenance'."
+        )
+    )
+    vendor_name: str = Field(
+        description=(
+            "The name of the company that SENT or ISSUED this offer — the SELLER or SUPPLIER. "
+            "This is NOT the customer or recipient. Look for the vendor's name in the letterhead, "
+            "header area, logo section, or footer of the document. "
+            "The customer is typically identified by labels like 'Kunde', 'Kundennummer', "
+            "'Kundenadresse', 'An', 'Empfänger', or 'Rechnungsadresse' — these are NOT the vendor. "
+            "For example, in a quote from 'Gärtner Gregg' sent to 'Lio Technologies GmbH', "
+            "the vendor_name should be 'Gärtner Gregg', NOT 'Lio Technologies GmbH'."
+        )
+    )
+    vendor_vat_id: Optional[str] = Field(
+        description=(
+            "The vendor's VAT identification number. Look for common German labels such as: "
+            "'USt-IdNr.', 'USt-IdNr', 'Umsatzsteuer-ID', 'UID-Nr.', 'Steuernummer', 'VAT ID', "
+            "or 'MwSt-Nr.'. The format is typically 'DE' followed by 9 digits for German companies "
+            "(e.g., 'DE198570491'). This information is usually found in the header, footer, or "
+            "company details section of the document. Return null if not present."
+        )
+    )
+    department: Optional[str] = Field(
+        description=(
+            "The department or organizational unit requesting the procurement. "
+            "This information is usually NOT present on vendor offers. Return null if not found."
+        )
+    )
+    order_lines: List[ExtractedOrderLine] = Field(
+        description="The list of individual line items from the offer, each representing a product or service."
+    )
+    total_cost: Decimal = Field(
+        description=(
+            "The TOTAL NET cost as explicitly stated on the document. "
+            "Look for labels such as: 'Nettobetrag', 'Summe netto', 'Zwischensumme', "
+            "'Gesamtbetrag netto', 'Summe (netto)', or 'Subtotal'. "
+            "Do NOT calculate this by summing line items — read the stated value from the document. "
+            "The document's stated net total takes precedence over any calculations. "
+            "Return as a plain decimal number without currency symbols (e.g., 1767.26 not €1.767,26)."
+        )
+    )
+
+
+EXTRACTION_SYSTEM_PROMPT = """You are a procurement document analyst specializing in extracting structured data from vendor quotes, offers, and invoices — primarily in German but also English.
+
+CRITICAL RULES:
+
+1. VENDOR vs. CUSTOMER DISTINCTION:
+   - The document is a quote SENT BY the vendor TO a customer.
+   - The VENDOR is the company issuing the document — found in the letterhead, header, logo area, or footer.
+   - The CUSTOMER is the recipient — identified by labels like 'Kunde', 'Kundennummer', 'Kundenadresse', 'An', 'Empfänger', 'Rechnungsadresse'.
+   - The customer is NOT the vendor. Always extract the vendor's name, not the customer's name.
+
+2. VAT ID EXTRACTION:
+   - Look for German VAT labels: 'USt-IdNr.', 'USt-IdNr', 'Umsatzsteuer-ID', 'UID-Nr.', 'Steuernummer', 'VAT ID', 'MwSt-Nr.'
+   - Usually found in the header, footer, or company details section.
+   - German format: 'DE' followed by 9 digits (e.g., 'DE198570491').
+
+3. TOTAL COST:
+   - Read the net total (Nettobetrag/Summe netto/Zwischensumme) exactly as stated on the document.
+   - Do NOT compute by summing line items. The document's stated total takes precedence.
+   - Common labels: 'Nettobetrag', 'Summe netto', 'Zwischensumme', 'Gesamtbetrag netto', 'Summe (netto)', 'Subtotal'.
+
+4. PRODUCT NAMES:
+   - Extract short product names or titles — often bold headings, article numbers with names, or short labels before detailed descriptions.
+   - Examples: 'Moosbild Mix-Moos 160x80', 'Adobe Photoshop License', 'Office Chair Model XY-200'.
+   - If no distinct product name exists, use the first few meaningful words of the description.
+
+5. MONETARY VALUES:
+   - Return all monetary values as plain decimals without currency symbols (e.g., 1767.26 not €1.767,26).
+
+6. NULL VALUES:
+   - If a field is genuinely not present in the document, use null.
+
+EXAMPLE:
+Given a document from 'Gärtner Gregg' addressed to customer 'Lio Technologies GmbH' with USt-IdNr. DE198570491 in the vendor's details section and a Nettobetrag of €1767.26:
+- vendor_name should be 'Gärtner Gregg' (NOT 'Lio Technologies GmbH')
+- vendor_vat_id should be 'DE198570491'
+- total_cost should be 1767.26"""
 
 
 # Only initialize OpenAI client if API key is available
@@ -45,14 +156,7 @@ def extract_offer_text(text: str) -> OfferExtraction:
         messages=[
             {
                 "role": "system",
-                "content": (
-                    "Extract procurement offer data from the user's text. "
-                    "Return numbers as plain decimals (no currency symbols). "
-                    "If a field is missing, use null. Ensure totals are consistent. "
-                    "For the 'title' field, generate a concise, descriptive procurement request title "
-                    "that summarises the purpose of the offer (e.g. 'Office Furniture Purchase' or "
-                    "'Annual IT Support Contract')."
-                ),
+                "content": EXTRACTION_SYSTEM_PROMPT,
             },
             {"role": "user", "content": text},
         ],
