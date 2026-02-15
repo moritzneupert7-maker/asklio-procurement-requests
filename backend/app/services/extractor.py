@@ -132,7 +132,7 @@ CRITICAL RULES:
    - If a field is genuinely not present in the document, use null.
 
 EXAMPLE:
-Given a document from 'Gärtner Gregg' addressed to customer 'Lio Technologies GmbH' with USt-IdNr. DE198570491 in the vendor's details section and a Nettobetrag of €1,767.26:
+Given a document from 'Gärtner Gregg' addressed to customer 'Lio Technologies GmbH' with USt-IdNr. DE198570491 in the vendor's details section and a Nettobetrag of €1767.26:
 - vendor_name should be 'Gärtner Gregg' (NOT 'Lio Technologies GmbH')
 - vendor_vat_id should be 'DE198570491'
 - total_cost should be 1767.26"""
