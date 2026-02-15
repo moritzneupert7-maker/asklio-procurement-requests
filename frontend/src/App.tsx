@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { create } from "zustand";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { createFromOffer, createRequest, listRequests, listCommodityGroups } from "./api";
@@ -144,6 +144,7 @@ export default function App() {
   
   const [dragActive, setDragActive] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const redirectTimeoutRef = useRef<number | null>(null);
   
   const { requests, queue, successMessage, setRequests, addToQueue, updateQueue, setSuccessMessage } = useStore();
 
@@ -177,6 +178,15 @@ export default function App() {
     }
   }, [selectedRequest]);
 
+  // Cleanup redirect timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleFileUpload = async (file: File) => {
     const queueId = `${Date.now()}-${file.name}`;
     addToQueue({ id: queueId, filename: file.name, status: "processing" });
@@ -191,9 +201,14 @@ export default function App() {
       setRequests(updatedRequests);
       
       // Auto-redirect to overview after 3 seconds
-      setTimeout(() => {
+      // Clear any existing timeout first
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+      redirectTimeoutRef.current = window.setTimeout(() => {
         setActiveTab("overview");
         setSuccessMessage(null);
+        redirectTimeoutRef.current = null;
       }, 3000);
     } catch (error) {
       updateQueue(queueId, "failed");
