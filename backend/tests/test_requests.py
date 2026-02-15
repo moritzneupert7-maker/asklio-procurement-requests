@@ -61,6 +61,7 @@ def test_create_from_offer():
         department=None,
         order_lines=[
             ExtractedOrderLine(
+                product="Printer paper A4",
                 description="Printer paper A4",
                 unit_price=Decimal("9.99"),
                 amount=100,
@@ -103,6 +104,7 @@ def test_create_from_offer_uses_extracted_department():
         department="Engineering",
         order_lines=[
             ExtractedOrderLine(
+                product="Monitor",
                 description="Monitor",
                 unit_price=Decimal("300.00"),
                 amount=2,
