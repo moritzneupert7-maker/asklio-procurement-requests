@@ -89,6 +89,7 @@ def test_create_from_offer():
     assert data["vendor_vat_id"] == "DE123456789"
     assert data["current_status"] == "Open"
     assert len(data["order_lines"]) == 1
+    assert data["order_lines"][0]["product"] == "Printer paper A4"
     assert data["order_lines"][0]["description"] == "Printer paper A4"
     assert float(data["total_cost"]) == 999.00
 
@@ -125,6 +126,7 @@ def test_create_from_offer_uses_extracted_department():
     assert r.status_code == 200
     data = r.json()
     assert data["department"] == "Engineering"
+    assert data["order_lines"][0]["product"] == "Monitor"
 
 
 def test_create_from_offer_unsupported_file_type():
