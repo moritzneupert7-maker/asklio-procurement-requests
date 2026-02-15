@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { create } from "zustand";
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { createFromOffer, createRequest, listRequests, listCommodityGroups } from "./api";
@@ -120,7 +120,7 @@ const useStore = create<AppStore>((set) => ({
 }));
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"overview" | "new" | "analytics" | "settings">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "new" | "analytics" | "settings">("new");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRequest, setSelectedRequest] = useState<ProcurementRequest | null>(null);
   const [commodityGroups, setCommodityGroups] = useState<CommodityGroup[]>([]);
@@ -144,6 +144,7 @@ export default function App() {
   
   const [dragActive, setDragActive] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const redirectTimeoutRef = useRef<number | null>(null);
   
   const { requests, queue, successMessage, setRequests, addToQueue, updateQueue, setSuccessMessage } = useStore();
 
@@ -177,6 +178,15 @@ export default function App() {
     }
   }, [selectedRequest]);
 
+  // Cleanup redirect timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleFileUpload = async (file: File) => {
     const queueId = `${Date.now()}-${file.name}`;
     addToQueue({ id: queueId, filename: file.name, status: "processing" });
@@ -184,11 +194,22 @@ export default function App() {
     try {
       await createFromOffer(file);
       updateQueue(queueId, "completed");
-      setSuccessMessage(`Request created from ${file.name} successfully!`);
+      setSuccessMessage("You will be forwarded to the updated overview of your procurement intake");
       
       // Refresh requests
       const updatedRequests = await listRequests();
       setRequests(updatedRequests);
+      
+      // Auto-redirect to overview after 3 seconds
+      // Clear any existing timeout first
+      if (redirectTimeoutRef.current) {
+        clearTimeout(redirectTimeoutRef.current);
+      }
+      redirectTimeoutRef.current = window.setTimeout(() => {
+        setActiveTab("overview");
+        setSuccessMessage(null);
+        redirectTimeoutRef.current = null;
+      }, 3000);
     } catch (error) {
       updateQueue(queueId, "failed");
       console.error("Upload failed:", error);
@@ -353,8 +374,8 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-8" aria-label="Tabs">
             {[
-              { id: "overview", label: "Overview", icon: <OverviewIcon /> },
               { id: "new", label: "New Request", icon: <PlusIcon /> },
+              { id: "overview", label: "Overview", icon: <OverviewIcon /> },
               { id: "analytics", label: "Analytics", icon: <ChartIcon /> },
               { id: "settings", label: "Settings", icon: <SettingsIcon /> },
             ].map((tab) => (
