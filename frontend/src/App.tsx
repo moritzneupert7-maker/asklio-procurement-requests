@@ -166,13 +166,15 @@ export default function App() {
   // Close modal on Escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && selectedRequest) {
+      if (e.key === 'Escape') {
         setSelectedRequest(null);
       }
     };
     
-    window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
+    if (selectedRequest) {
+      window.addEventListener('keydown', handleEscape);
+      return () => window.removeEventListener('keydown', handleEscape);
+    }
   }, [selectedRequest]);
 
   const handleFileUpload = async (file: File) => {
@@ -997,7 +999,10 @@ export default function App() {
                   <div className="bg-gray-50 rounded-lg p-4 md:col-span-2">
                     <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Created At</span>
                     <p className="mt-1 text-sm font-medium text-gray-900">
-                      {new Date(selectedRequest.created_at).toLocaleString()}
+                      {new Date(selectedRequest.created_at).toLocaleString('en-US', { 
+                        dateStyle: 'medium', 
+                        timeStyle: 'short' 
+                      })}
                     </p>
                   </div>
                 </div>
