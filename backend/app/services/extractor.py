@@ -28,7 +28,7 @@ class ExtractedOrderLine(BaseModel):
     )
     unit_price: Decimal = Field(
         description=(
-            "The gross unit price per single item as stated on the document. "
+            "The unit price per single item as stated on the document. "
             "Return as a plain decimal number without currency symbols (e.g., 150.00 not €150,00)."
         )
     )
