@@ -120,7 +120,7 @@ const useStore = create<AppStore>((set) => ({
 }));
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<"overview" | "new" | "analytics" | "settings">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "new" | "analytics" | "settings">("new");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRequest, setSelectedRequest] = useState<ProcurementRequest | null>(null);
   const [commodityGroups, setCommodityGroups] = useState<CommodityGroup[]>([]);
@@ -184,11 +184,17 @@ export default function App() {
     try {
       await createFromOffer(file);
       updateQueue(queueId, "completed");
-      setSuccessMessage(`Request created from ${file.name} successfully!`);
+      setSuccessMessage("You will be forwarded to the updated overview of your procurement intake");
       
       // Refresh requests
       const updatedRequests = await listRequests();
       setRequests(updatedRequests);
+      
+      // Auto-redirect to overview after 3 seconds
+      setTimeout(() => {
+        setActiveTab("overview");
+        setSuccessMessage(null);
+      }, 3000);
     } catch (error) {
       updateQueue(queueId, "failed");
       console.error("Upload failed:", error);
@@ -353,8 +359,8 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <nav className="flex space-x-8" aria-label="Tabs">
             {[
-              { id: "overview", label: "Overview", icon: <OverviewIcon /> },
               { id: "new", label: "New Request", icon: <PlusIcon /> },
+              { id: "overview", label: "Overview", icon: <OverviewIcon /> },
               { id: "analytics", label: "Analytics", icon: <ChartIcon /> },
               { id: "settings", label: "Settings", icon: <SettingsIcon /> },
             ].map((tab) => (
