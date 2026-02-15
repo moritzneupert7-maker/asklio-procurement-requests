@@ -91,7 +91,6 @@ class TestMonetaryValueValidators:
             title="Test Offer",
             vendor_name="Test Vendor",
             vendor_vat_id="DE123456789",
-            department=None,
             order_lines=[
                 ExtractedOrderLine(
                     product="Product 1",
@@ -112,7 +111,6 @@ class TestMonetaryValueValidators:
             title="Test Offer",
             vendor_name="Test Vendor",
             vendor_vat_id=None,
-            department=None,
             order_lines=[
                 ExtractedOrderLine(
                     product="Product 1",
@@ -133,7 +131,6 @@ class TestMonetaryValueValidators:
             title="Test Offer",
             vendor_name="Test Vendor",
             vendor_vat_id=None,
-            department=None,
             order_lines=[
                 ExtractedOrderLine(
                     product="Product 1",
@@ -154,7 +151,6 @@ class TestMonetaryValueValidators:
             title="Office Supplies",
             vendor_name="German Vendor GmbH",
             vendor_vat_id="DE198570491",
-            department="Marketing",
             order_lines=[
                 ExtractedOrderLine(
                     product="Product 1",

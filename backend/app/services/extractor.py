@@ -77,6 +77,7 @@ class ExtractedOrderLine(BaseModel):
         description="The quantity or amount of this item being ordered."
     )
     unit: Optional[str] = Field(
+        default=None,
         description=(
             "The unit of measurement for the amount (e.g., 'pcs', 'licenses', 'hours', 'kg', 'm²'). "
             "Return null if not specified."
@@ -118,18 +119,13 @@ class OfferExtraction(BaseModel):
         )
     )
     vendor_vat_id: Optional[str] = Field(
+        default=None,
         description=(
             "The vendor's VAT identification number. Look for common German labels such as: "
             "'USt-IdNr.', 'USt-IdNr', 'Umsatzsteuer-ID', 'UID-Nr.', 'Steuernummer', 'VAT ID', "
             "or 'MwSt-Nr.'. The format is typically 'DE' followed by 9 digits for German companies "
             "(e.g., 'DE198570491'). This information is usually found in the header, footer, or "
             "company details section of the document. Return null if not present."
-        )
-    )
-    department: Optional[str] = Field(
-        description=(
-            "The department or organizational unit requesting the procurement. "
-            "This information is usually NOT present on vendor offers. Return null if not found."
         )
     )
     order_lines: List[ExtractedOrderLine] = Field(
