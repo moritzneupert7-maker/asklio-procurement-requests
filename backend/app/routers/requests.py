@@ -152,8 +152,7 @@ async def create_from_offer(file: UploadFile = File(...), db: Session = Depends(
                 total_price=line.total_price,
             )
         )
-        total_cost += line.total_price
-    req.total_cost = total_cost.quantize(Decimal("0.01"))
+    req.total_cost = extracted.total_cost.quantize(Decimal("0.01"))
 
     req.status_events.append(
         models.StatusEvent(from_status=None, to_status="Open", changed_by=requestor_name)
@@ -298,8 +297,7 @@ def extract_offer(request_id: int, db: Session = Depends(get_db)):
                 total_price=line.total_price,
             )
         )
-        total_cost += line.total_price
-    req.total_cost = total_cost.quantize(Decimal("0.01"))
+    req.total_cost = extracted.total_cost.quantize(Decimal("0.01"))
 
     # Predict commodity group (auto-fill)
     groups = db.query(models.CommodityGroup).order_by(models.CommodityGroup.id).all()
