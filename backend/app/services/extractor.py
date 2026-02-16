@@ -2,12 +2,16 @@ from decimal import Decimal
 from typing import Optional, List
 import os
 import re
+import logging
 
 from openai import OpenAI
 from pydantic import BaseModel, Field, field_validator
 
 from dotenv import load_dotenv
 load_dotenv()
+
+logger = logging.getLogger(__name__)
+
 
 def clean_monetary_value(v):
     """
@@ -134,6 +138,13 @@ class OfferExtraction(BaseModel):
             "company details section of the document. Return null if not present."
         )
     )
+    department: Optional[str] = Field(
+        default=None,
+        description=(
+            "The department this procurement request belongs to, if identifiable from the document. "
+            "Return null if not present."
+        )
+    )
     order_lines: List[ExtractedOrderLine] = Field(
         default_factory=list,
         description=(
@@ -151,17 +162,22 @@ class OfferExtraction(BaseModel):
         description=(
             "The TOTAL NET cost (before tax/VAT) as explicitly stated on the document. "
             "This must ALWAYS be the NET total, NEVER the gross total. "
-            "\n"            "German labels for NET total (USE THESE): "
+            "\n"
+            "German labels for NET total (USE THESE): "
             "'Nettosumme', 'Nettobetrag', 'Summe netto', 'Positionen netto', 'Zwischensumme', "
             "'Gesamtbetrag netto', 'Summe (netto)', 'Subtotal'. "
-            "\n"            "German labels for GROSS total (NEVER USE THESE): "
+            "\n"
+            "German labels for GROSS total (NEVER USE THESE): "
             "'Gesamtsumme', 'Endsumme', 'Bruttobetrag', 'Summe brutto', 'Gesamtbetrag brutto', "
             "'Rechnungsbetrag', 'Total inkl. MwSt.'. "
-            "\n"            "CRITICAL: If you see both 'Nettosumme' and 'Gesamtsumme' on the same document, "
+            "\n"
+            "CRITICAL: If you see both 'Nettosumme' and 'Gesamtsumme' on the same document, "
             "ALWAYS use the Nettosumme. The Gesamtsumme includes tax and must be ignored. "
-            "\n"            "The total_cost should equal the sum of all order line net prices PLUS any separately "
+            "\n"
+            "The total_cost should equal the sum of all order line net prices PLUS any separately "
             "listed shipping costs (Versandkosten netto), but EXCLUDING all tax/VAT amounts. "
-            "\n"            "Do NOT calculate this by summing line items — read the stated NET value from the document. "
+            "\n"
+            "Do NOT calculate this by summing line items — read the stated NET value from the document. "
             "Return as a plain decimal number without currency symbols (e.g., 1767.26 not €1.767,26)."
         )
     )
@@ -263,6 +279,14 @@ def extract_offer_text(text: str) -> OfferExtraction:
             "Please set OPENAI_API_KEY in your .env file or environment variables."
         )
     
+    # Truncate very long texts to avoid exceeding context window
+    MAX_CHARS = 15000  # ~4000 tokens, plenty for any offer
+    if len(text) > MAX_CHARS:
+        logger.warning(f"Offer text too long ({len(text)} chars), truncating to {MAX_CHARS}")
+        text = text[:MAX_CHARS]
+    
+    logger.info(f"Sending {len(text)} chars to OpenAI for extraction")
+    
     completion = client.chat.completions.parse(
         model="gpt-4o-mini",
         messages=[
@@ -279,4 +303,6 @@ def extract_offer_text(text: str) -> OfferExtraction:
     if message.parsed:
         return message.parsed
 
-    raise RuntimeError(message.refusal or "Model did not return a parsed extraction.")
+    refusal = message.refusal or "Model did not return a parsed extraction."
+    logger.error(f"OpenAI refused/failed extraction: {refusal}")
+    raise RuntimeError(refusal)
