@@ -176,3 +176,133 @@ class TestMonetaryValueValidators:
         assert extraction.order_lines[1].unit_price == Decimal("99.99")
         assert extraction.order_lines[1].total_price == Decimal("499.95")
         assert extraction.total_cost == Decimal("2969.07")
+
+
+class TestNetVsGrossTotalValidation:
+    """Test that the model properly validates NET vs GROSS total field descriptions."""
+
+    def test_extraction_with_net_total_labeled_nettosumme(self):
+        """
+        Test extraction where NET total (Nettosumme) is correctly extracted.
+        This validates the field description for total_cost.
+        """
+        extraction = OfferExtraction(
+            title="German Invoice with Nettosumme",
+            vendor_name="Test Vendor GmbH",
+            vendor_vat_id="DE123456789",
+            order_lines=[
+                ExtractedOrderLine(
+                    product="Product 1",
+                    description="Test product description",
+                    unit_price="1000.00",
+                    amount=1,
+                    unit="pcs",
+                    total_price="1000.00"
+                )
+            ],
+            total_cost="€1.758,00"  # This is the Nettosumme
+        )
+        # Should extract NET total (before tax), not GROSS (after tax)
+        assert extraction.total_cost == Decimal("1758.00")
+
+    def test_extraction_with_shipping_costs_as_line_item(self):
+        """
+        Test that shipping costs are properly extracted as a separate order line.
+        This validates the order_lines field description.
+        """
+        extraction = OfferExtraction(
+            title="Order with Shipping Costs",
+            vendor_name="Supplier GmbH",
+            vendor_vat_id="DE987654321",
+            order_lines=[
+                ExtractedOrderLine(
+                    product="Main Product",
+                    description="Product specifications",
+                    unit_price="1186.14",
+                    amount=1,
+                    unit="pcs",
+                    total_price="1186.14"
+                ),
+                ExtractedOrderLine(
+                    product="Versandkosten",  # Shipping costs as separate line
+                    description="Shipping and delivery",
+                    unit_price="113.85",
+                    amount=1,
+                    unit="pcs",
+                    total_price="113.85"
+                )
+            ],
+            total_cost="€1.299,99"  # Sum of net items (1186.14 + 113.85)
+        )
+        # Verify shipping cost is extracted as separate line
+        assert len(extraction.order_lines) == 2
+        assert extraction.order_lines[1].product == "Versandkosten"
+        assert extraction.order_lines[1].total_price == Decimal("113.85")
+        # Total should be sum of net amounts (NOT including tax)
+        assert extraction.total_cost == Decimal("1299.99")
+
+    def test_extraction_with_transport_costs_as_line_item(self):
+        """
+        Test that transport costs are extracted as a separate line with German label.
+        """
+        extraction = OfferExtraction(
+            title="Order with Transport",
+            vendor_name="Transport Vendor GmbH",
+            vendor_vat_id="DE111222333",
+            order_lines=[
+                ExtractedOrderLine(
+                    product="Office Supplies",
+                    description="Various office items",
+                    unit_price="500.00",
+                    amount=2,
+                    unit="pcs",
+                    total_price="1000.00"
+                ),
+                ExtractedOrderLine(
+                    product="Transport, Verpackung und Versand",
+                    description="Shipping, packaging and delivery",
+                    unit_price="320.00",
+                    amount=1,
+                    unit="pcs",
+                    total_price="320.00"
+                )
+            ],
+            total_cost="€1.320,00"
+        )
+        # Verify transport is extracted
+        assert len(extraction.order_lines) == 2
+        assert "Transport" in extraction.order_lines[1].product
+        assert extraction.order_lines[1].total_price == Decimal("320.00")
+        assert extraction.total_cost == Decimal("1320.00")
+
+    def test_net_total_with_multiple_tax_rates(self):
+        """
+        Test that NET total is extracted correctly even with multiple tax rates.
+        Document should show Nettosumme, not Gesamtsumme.
+        """
+        extraction = OfferExtraction(
+            title="Complex Invoice",
+            vendor_name="Complex Vendor GmbH",
+            vendor_vat_id="DE444555666",
+            order_lines=[
+                ExtractedOrderLine(
+                    product="Product A",
+                    description="Description A",
+                    unit_price="800.00",
+                    amount=1,
+                    unit="pcs",
+                    total_price="800.00"
+                ),
+                ExtractedOrderLine(
+                    product="Product B",
+                    description="Description B",
+                    unit_price="200.00",
+                    amount=1,
+                    unit="pcs",
+                    total_price="200.00"
+                )
+            ],
+            total_cost="€1.000,00"  # Nettosumme, not Gesamtsumme with tax
+        )
+        # Should be net total, not gross
+        assert extraction.total_cost == Decimal("1000.00")
