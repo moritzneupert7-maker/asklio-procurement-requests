@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field, field_validator
 from dotenv import load_dotenv
 load_dotenv()
 
-
 def clean_monetary_value(v):
     """
     Clean monetary values by removing currency symbols and handling European number formats.
@@ -41,6 +40,7 @@ def clean_monetary_value(v):
 
 class ExtractedOrderLine(BaseModel):
     product: str = Field(
+        default="Unknown Product",
         description=(
             "The SHORT product name or title — this is the first prominent line/heading of the line item, "
             "NOT the full description. In German quotes, this is typically the bold or first line in the "
@@ -58,6 +58,7 @@ class ExtractedOrderLine(BaseModel):
         )
     )
     description: str = Field(
+        default="",
         description=(
             "The detailed description and specifications that follow AFTER the product name. "
             "This includes dimensions, materials, configurations, colours, technical specs, "
@@ -68,12 +69,14 @@ class ExtractedOrderLine(BaseModel):
         )
     )
     unit_price: Decimal = Field(
+        default=Decimal("0.00"),
         description=(
             "The unit price per single item as stated on the document. "
             "Return as a plain decimal number without currency symbols (e.g., 150.00 not €150,00)."
         )
     )
     amount: int = Field(
+        default=1,
         description="The quantity or amount of this item being ordered."
     )
     unit: Optional[str] = Field(
@@ -84,6 +87,7 @@ class ExtractedOrderLine(BaseModel):
         )
     )
     total_price: Decimal = Field(
+        default=Decimal("0.00"),
         description=(
             "The net total price for this specific line item as stated on the document. "
             "Return as a plain decimal number without currency symbols. "
@@ -100,6 +104,7 @@ class ExtractedOrderLine(BaseModel):
 
 class OfferExtraction(BaseModel):
     title: str = Field(
+        default="Procurement Request",
         description=(
             "Generate a concise, descriptive procurement request title that summarizes "
             "the purpose of the offer. Examples: 'Office Furniture Purchase', "
@@ -108,6 +113,7 @@ class OfferExtraction(BaseModel):
         )
     )
     vendor_name: str = Field(
+        default="Unknown Vendor",
         description=(
             "The name of the company that SENT or ISSUED this offer — the SELLER or SUPPLIER. "
             "This is NOT the customer or recipient. Look for the vendor's name in the letterhead, "
@@ -129,6 +135,7 @@ class OfferExtraction(BaseModel):
         )
     )
     order_lines: List[ExtractedOrderLine] = Field(
+        default_factory=list,
         description=(
             "The list of individual line items from the offer, each representing a product or service. "
             "IMPORTANT: If the document lists shipping or transport costs as a separate line or position "
@@ -140,25 +147,21 @@ class OfferExtraction(BaseModel):
         )
     )
     total_cost: Decimal = Field(
+        default=Decimal("0.00"),
         description=(
             "The TOTAL NET cost (before tax/VAT) as explicitly stated on the document. "
             "This must ALWAYS be the NET total, NEVER the gross total. "
-            "\n"
-            "German labels for NET total (USE THESE): "
+            "\n"            "German labels for NET total (USE THESE): "
             "'Nettosumme', 'Nettobetrag', 'Summe netto', 'Positionen netto', 'Zwischensumme', "
             "'Gesamtbetrag netto', 'Summe (netto)', 'Subtotal'. "
-            "\n"
-            "German labels for GROSS total (NEVER USE THESE): "
+            "\n"            "German labels for GROSS total (NEVER USE THESE): "
             "'Gesamtsumme', 'Endsumme', 'Bruttobetrag', 'Summe brutto', 'Gesamtbetrag brutto', "
             "'Rechnungsbetrag', 'Total inkl. MwSt.'. "
-            "\n"
-            "CRITICAL: If you see both 'Nettosumme' and 'Gesamtsumme' on the same document, "
+            "\n"            "CRITICAL: If you see both 'Nettosumme' and 'Gesamtsumme' on the same document, "
             "ALWAYS use the Nettosumme. The Gesamtsumme includes tax and must be ignored. "
-            "\n"
-            "The total_cost should equal the sum of all order line net prices PLUS any separately "
+            "\n"            "The total_cost should equal the sum of all order line net prices PLUS any separately "
             "listed shipping costs (Versandkosten netto), but EXCLUDING all tax/VAT amounts. "
-            "\n"
-            "Do NOT calculate this by summing line items — read the stated NET value from the document. "
+            "\n"            "Do NOT calculate this by summing line items — read the stated NET value from the document. "
             "Return as a plain decimal number without currency symbols (e.g., 1767.26 not €1.767,26)."
         )
     )
@@ -227,6 +230,10 @@ CRITICAL RULES:
 7. NULL VALUES:
    - If a field is genuinely not present in the document, use null.
 
+8. TITLE:
+   - Always generate a concise, descriptive procurement request title.
+   - If unsure, use a generic title like 'Procurement Request'.
+
 EXAMPLE:
 Given a document from 'Gärtner Gregg' addressed to customer 'Lio Technologies GmbH' with USt-IdNr. DE198570491 in the vendor's details section, showing:
 - Positionen netto: €1,186.14
@@ -236,6 +243,7 @@ Given a document from 'Gärtner Gregg' addressed to customer 'Lio Technologies G
 - Gesamtsumme: €1,546.99
 
 Extraction should be:
+- title: 'Procurement Order from Gärtner Gregg'
 - vendor_name: 'Gärtner Gregg' (NOT 'Lio Technologies GmbH')
 - vendor_vat_id: 'DE198570491'
 - order_lines: [...product lines..., {product: 'Versandkosten', total_price: 113.85, ...}]
