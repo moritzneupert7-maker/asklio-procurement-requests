@@ -129,15 +129,36 @@ class OfferExtraction(BaseModel):
         )
     )
     order_lines: List[ExtractedOrderLine] = Field(
-        description="The list of individual line items from the offer, each representing a product or service."
+        description=(
+            "The list of individual line items from the offer, each representing a product or service. "
+            "IMPORTANT: If the document lists shipping or transport costs as a separate line or position "
+            "(e.g., 'Versandkosten netto: €113.85', 'Transport, Verpackung und Versand', 'Frachtkosten'), "
+            "these MUST be extracted as their own order line item. "
+            "Common German shipping cost labels: 'Versandkosten', 'Versand', 'Transport', 'Lieferkosten', "
+            "'Frachtkosten', 'Speditionskosten', 'Verpackung und Versand', 'Porto'. "
+            "Use the shipping label as the product name (e.g., 'Versandkosten', 'Transport, Verpackung und Versand')."
+        )
     )
     total_cost: Decimal = Field(
         description=(
-            "The TOTAL NET cost as explicitly stated on the document. "
-            "Look for labels such as: 'Nettobetrag', 'Summe netto', 'Zwischensumme', "
-            "'Gesamtbetrag netto', 'Summe (netto)', or 'Subtotal'. "
-            "Do NOT calculate this by summing line items — read the stated value from the document. "
-            "The document's stated net total takes precedence over any calculations. "
+            "The TOTAL NET cost (before tax/VAT) as explicitly stated on the document. "
+            "This must ALWAYS be the NET total, NEVER the gross total. "
+            "\n"
+            "German labels for NET total (USE THESE): "
+            "'Nettosumme', 'Nettobetrag', 'Summe netto', 'Positionen netto', 'Zwischensumme', "
+            "'Gesamtbetrag netto', 'Summe (netto)', 'Subtotal'. "
+            "\n"
+            "German labels for GROSS total (NEVER USE THESE): "
+            "'Gesamtsumme', 'Endsumme', 'Bruttobetrag', 'Summe brutto', 'Gesamtbetrag brutto', "
+            "'Rechnungsbetrag', 'Total inkl. MwSt.'. "
+            "\n"
+            "CRITICAL: If you see both 'Nettosumme' and 'Gesamtsumme' on the same document, "
+            "ALWAYS use the Nettosumme. The Gesamtsumme includes tax and must be ignored. "
+            "\n"
+            "The total_cost should equal the sum of all order line net prices PLUS any separately "
+            "listed shipping costs (Versandkosten netto), but EXCLUDING all tax/VAT amounts. "
+            "\n"
+            "Do NOT calculate this by summing line items — read the stated NET value from the document. "
             "Return as a plain decimal number without currency symbols (e.g., 1767.26 not €1.767,26)."
         )
     )
@@ -164,12 +185,27 @@ CRITICAL RULES:
    - Usually found in the header, footer, or company details section.
    - German format: 'DE' followed by 9 digits (e.g., 'DE198570491').
 
-3. TOTAL COST:
-   - Read the net total (Nettobetrag/Summe netto/Zwischensumme) exactly as stated on the document.
-   - Do NOT compute by summing line items. The document's stated total takes precedence.
-   - Common labels: 'Nettobetrag', 'Summe netto', 'Zwischensumme', 'Gesamtbetrag netto', 'Summe (netto)', 'Subtotal'.
+3. NET vs. GROSS TOTAL (CRITICAL):
+   - The total_cost field MUST ALWAYS be the NET total (before tax/VAT), NEVER the gross total.
+   - German labels for NET total (USE THESE):
+     * 'Nettosumme', 'Nettobetrag', 'Summe netto', 'Positionen netto', 'Zwischensumme'
+     * 'Gesamtbetrag netto', 'Summe (netto)', 'Subtotal'
+   - German labels for GROSS total (NEVER USE THESE — they include tax):
+     * 'Gesamtsumme', 'Endsumme', 'Bruttobetrag', 'Summe brutto'
+     * 'Gesamtbetrag brutto', 'Rechnungsbetrag', 'Total inkl. MwSt.'
+   - If you see BOTH 'Nettosumme' and 'Gesamtsumme' on the same document, ALWAYS use the Nettosumme.
+   - NEVER use the Gesamtsumme, Endsumme, or Bruttobetrag — these include tax.
+   - Read the net total exactly as stated on the document.
+   - Do NOT compute by summing line items. The document's stated NET total takes precedence.
 
-4. PRODUCT NAMES (CRITICAL — must not be empty):
+4. SHIPPING COSTS AS SEPARATE LINE ITEMS (CRITICAL):
+   - If the document lists shipping or transport costs as a separate line or position, these MUST be extracted as their own order line item.
+   - Common German shipping cost labels: 'Versandkosten', 'Versand', 'Transport', 'Lieferkosten', 'Frachtkosten', 'Speditionskosten', 'Verpackung und Versand', 'Porto'.
+   - Use the shipping label as the product name (e.g., 'Versandkosten', 'Transport, Verpackung und Versand').
+   - Extract the NET shipping cost (e.g., 'Versandkosten netto: €113.85'), NOT the gross amount with tax.
+   - The total_cost should equal: sum of all order line net prices + net shipping costs, EXCLUDING all tax/VAT.
+
+5. PRODUCT NAMES (CRITICAL — must not be empty):
    - Each line item in a German quote has TWO parts: a SHORT product name/title, and a longer description.
    - The PRODUCT NAME is the first prominent line or heading of the line item — typically bold text,
      or the first line in the 'Bezeichnung'/'Produkt' column before specs begin.
@@ -180,21 +216,30 @@ CRITICAL RULES:
      * 'Moosbild "70:30" mit Schriftzug "askLio"' (NOT the paragraph about Waldmoos etc.)
      * 'Moosbild Mix-Moos 160x80 cm' (NOT 'Moosart: Mix-Moos, Außenabmessungen...')
      * 'Logointegration "asklio" horizontal' (NOT 'Gesamtgröße 105 cm Breite...')
+     * 'Versandkosten' (when shipping is a separate line)
    - The DESCRIPTION field gets everything AFTER the product name (specs, dimensions, materials, etc.).
    - If you cannot clearly distinguish a product name from the description, use the first meaningful
      phrase (first line or first ~5-8 words) as the product name.
 
-5. MONETARY VALUES:
+6. MONETARY VALUES:
    - Return all monetary values as plain decimals without currency symbols (e.g., 1767.26 not €1.767,26).
 
-6. NULL VALUES:
+7. NULL VALUES:
    - If a field is genuinely not present in the document, use null.
 
 EXAMPLE:
-Given a document from 'Gärtner Gregg' addressed to customer 'Lio Technologies GmbH' with USt-IdNr. DE198570491 in the vendor's details section and a Nettobetrag of €1767.26:
-- vendor_name should be 'Gärtner Gregg' (NOT 'Lio Technologies GmbH')
-- vendor_vat_id should be 'DE198570491'
-- total_cost should be 1767.26"""
+Given a document from 'Gärtner Gregg' addressed to customer 'Lio Technologies GmbH' with USt-IdNr. DE198570491 in the vendor's details section, showing:
+- Positionen netto: €1,186.14
+- Versandkosten netto: €113.85
+- Nettosumme: €1,299.99
+- Umsatzsteuer 19%: €247.00
+- Gesamtsumme: €1,546.99
+
+Extraction should be:
+- vendor_name: 'Gärtner Gregg' (NOT 'Lio Technologies GmbH')
+- vendor_vat_id: 'DE198570491'
+- order_lines: [...product lines..., {product: 'Versandkosten', total_price: 113.85, ...}]
+- total_cost: 1299.99 (the Nettosumme, NOT the Gesamtsumme of 1546.99)"""
 
 
 # Only initialize OpenAI client if API key is available
