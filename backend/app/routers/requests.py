@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 import pdfplumber 
 import io
+import re
+import logging
 from typing import Union
 
 from ..models import CommodityGroup
@@ -20,10 +22,62 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from .. import models, schemas
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/requests", tags=["requests"])
 
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
+
+
+def sanitize_extracted_text(text: str) -> str:
+    """
+    Remove non-printable characters and PDF artifacts from extracted text.
+    pdfplumber can sometimes return raw PDF operators or binary garbage
+    mixed with real text. This function cleans that up.
+    """
+    if not text:
+        return ""
+    
+    # Remove null bytes
+    text = text.replace('\x00', '')
+    
+    # Remove non-printable characters except common whitespace
+    # Keep: newlines, tabs, carriage returns, and normal printable chars
+    cleaned = []
+    for char in text:
+        if char in ('\n', '\r', '\t') or (ord(char) >= 32 and ord(char) < 127) or ord(char) >= 160:
+            cleaned.append(char)
+        else:
+            cleaned.append(' ')
+    text = ''.join(cleaned)
+    
+    # Collapse multiple spaces into one
+    text = re.sub(r' {3,}', '  ', text)
+    
+    # Remove lines that look like raw PDF operators (e.g., "endobj", "stream", "xref")
+    lines = text.split('\n')
+    filtered_lines = []
+    pdf_artifacts = {'endobj', 'endstream', 'stream', 'xref', 'startxref', 'trailer', '%%EOF'}
+    for line in lines:
+        stripped = line.strip()
+        # Skip lines that are pure PDF structure
+        if stripped.lower() in pdf_artifacts:
+            continue
+        # Skip lines that look like PDF object references (e.g., "1 0 obj", "5 0 R")
+        if re.match(r'^\d+\s+\d+\s+(obj|R)$', stripped):
+            continue
+        # Skip lines starting with PDF markers
+        if stripped.startswith('%PDF-') or stripped.startswith('%%'):
+            continue
+        filtered_lines.append(line)
+    
+    text = '\n'.join(filtered_lines)
+    
+    # Collapse excessive newlines
+    text = re.sub(r'\n{4,}', '\n\n\n', text)
+    
+    return text.strip()
 
 
 def extract_text_from_pdf(pdf_source: Union[io.BytesIO, str]) -> str:
@@ -37,22 +91,41 @@ def extract_text_from_pdf(pdf_source: Union[io.BytesIO, str]) -> str:
         Extracted text with table data formatted as pipe-delimited rows
     """
     text_parts = []
-    with pdfplumber.open(pdf_source) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text() or ""
-            
-            # Also extract tables to capture structured pricing data
-            tables = page.extract_tables()
-            if tables:
-                for table in tables:
-                    for row in table:
-                        cleaned = [str(cell).strip() if cell else "" for cell in row]
-                        page_text += "\n" + " | ".join(cleaned)
-            
-            if page_text.strip():
-                text_parts.append(page_text)
+    try:
+        with pdfplumber.open(pdf_source) as pdf:
+            logger.info(f"PDF has {len(pdf.pages)} pages")
+            for i, page in enumerate(pdf.pages):
+                page_text = page.extract_text() or ""
+                
+                # Also extract tables to capture structured pricing data
+                tables = page.extract_tables()
+                if tables:
+                    for table in tables:
+                        for row in table:
+                            cleaned = [str(cell).strip() if cell else "" for cell in row]
+                            page_text += "\n" + " | ".join(cleaned)
+                
+                if page_text.strip():
+                    text_parts.append(page_text)
+                    logger.info(f"Page {i+1}: extracted {len(page_text)} chars")
+                else:
+                    logger.warning(f"Page {i+1}: no text extracted")
+    except Exception as e:
+        logger.error(f"pdfplumber failed to open/read PDF: {e}")
+        raise
     
-    return "\n\n".join(text_parts).strip()
+    raw_text = "\n\n".join(text_parts).strip()
+    
+    # Sanitize: remove PDF artifacts and non-printable chars
+    clean_text = sanitize_extracted_text(raw_text)
+    
+    logger.info(f"Total extracted text: {len(raw_text)} chars raw, {len(clean_text)} chars after sanitization")
+    
+    # Log first 500 chars for debugging
+    if clean_text:
+        logger.info(f"Text preview: {clean_text[:500]!r}")
+    
+    return clean_text
 
 
 @router.post("", response_model=schemas.ProcurementRequestOut)
@@ -95,9 +168,6 @@ def create_request(payload: schemas.ProcurementRequestCreate, db: Session = Depe
     db.refresh(req)
     return req
 
-
-
-
 @router.post("/create-from-offer", response_model=schemas.ProcurementRequestOut)
 async def create_from_offer(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """Upload an offer file, extract data via LLM, and create a procurement request automatically."""
@@ -108,10 +178,19 @@ async def create_from_offer(file: UploadFile = File(...), db: Session = Depends(
     filename = file.filename or "unknown"
     suffix = Path(filename).suffix.lower()
 
+    logger.info(f"Processing offer upload: {filename} ({len(contents)} bytes)")
+
     if suffix == ".txt":
         offer_text = contents.decode("utf-8", errors="ignore")
     elif suffix == ".pdf":
-        offer_text = extract_text_from_pdf(io.BytesIO(contents))
+        try:
+            offer_text = extract_text_from_pdf(io.BytesIO(contents))
+        except Exception as e:
+            logger.error(f"PDF text extraction failed for {filename}: {e}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to read PDF: {e}",
+            )
         if not offer_text:
             raise HTTPException(
                 status_code=400,
@@ -120,10 +199,13 @@ async def create_from_offer(file: UploadFile = File(...), db: Session = Depends(
     else:
         raise HTTPException(status_code=400, detail="Supported offer types: .txt, .pdf")
 
+    logger.info(f"Offer text length for {filename}: {len(offer_text)} chars")
+
     # LLM extraction
     try:
         extracted = extract_offer_text(offer_text)
     except Exception as e:
+        logger.error(f"LLM extraction failed for {filename}: {e}", exc_info=True)
         raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
 
     # Create procurement request with defaults + extracted data
@@ -221,11 +303,9 @@ async def upload_offer(request_id: int, file: UploadFile = File(...), db: Sessio
     return {"attachment_id": att.id, "filename": att.filename}
 
 
-
 @router.get("", response_model=list[schemas.ProcurementRequestOut])
 def list_requests(db: Session = Depends(get_db)):
     return db.query(models.ProcurementRequest).order_by(models.ProcurementRequest.id.desc()).all()
-
 
 @router.get("/{request_id}", response_model=schemas.ProcurementRequestOut)
 def get_request(request_id: int, db: Session = Depends(get_db)):
@@ -261,7 +341,14 @@ def extract_offer(request_id: int, db: Session = Depends(get_db)):
         offer_text = path.read_text(encoding="utf-8", errors="ignore")
 
     elif suffix == ".pdf":
-        offer_text = extract_text_from_pdf(str(path))
+        try:
+            offer_text = extract_text_from_pdf(str(path))
+        except Exception as e:
+            logger.error(f"PDF text extraction failed for {att.filename}: {e}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to read PDF: {e}",
+            )
         if not offer_text:
             raise HTTPException(
                 status_code=400,
@@ -274,6 +361,7 @@ def extract_offer(request_id: int, db: Session = Depends(get_db)):
     try:
         extracted = extract_offer_text(offer_text)
     except Exception as e:
+        logger.error(f"LLM extraction failed for {att.filename}: {e}", exc_info=True)
         raise HTTPException(status_code=502, detail=f"Extraction failed: {e}")
 
     # Apply extracted fields
@@ -320,8 +408,6 @@ def extract_offer(request_id: int, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(req)
     return req
-
-
 
 
 @router.post("/{request_id}/status", response_model=schemas.ProcurementRequestOut)
@@ -386,4 +472,3 @@ def delete_all_requests(db: Session = Depends(get_db)):
     db.query(models.ProcurementRequest).delete()
     db.commit()
     return {"message": "All requests deleted successfully"}
-
