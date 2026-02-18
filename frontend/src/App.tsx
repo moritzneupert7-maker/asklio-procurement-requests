@@ -726,6 +726,31 @@ export default function App() {
               </div>
             </div>
 
+            {/* Processing Notification */}
+            {queue.filter((q) => q.status === "processing").length > 0 && (
+              <div className="bg-white shadow rounded-lg p-6 border-2 border-blue-200">
+                <div className="space-y-3">
+                  {queue
+                    .filter((q) => q.status === "processing")
+                    .map((item) => (
+                      <div key={item.id} className="flex items-center gap-3 p-4 bg-blue-50 rounded-lg">
+                        <div className="flex-shrink-0 text-blue-500">
+                          <SpinnerIcon />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-blue-900">
+                            Processing your document...
+                          </p>
+                          <p className="text-sm text-blue-700 truncate">
+                            Extracting data from {item.filename}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
             {/* Divider */}
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
